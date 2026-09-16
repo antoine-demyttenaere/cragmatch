@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routers import gyms
+from app.routers import crags
 
 app = FastAPI(
     title="CragMatch API",
