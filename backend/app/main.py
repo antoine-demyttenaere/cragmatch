@@ -1,5 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
 from app.routers import crags
+from app.dependencies import get_db
+
 
 app = FastAPI(
     title="CragMatch API",
@@ -9,5 +14,6 @@ app = FastAPI(
 app.include_router(crags.router, prefix="/crags", tags=["crags"])
 
 @app.get("/health")
-def health_check():
-    return {"status": "ok"}
+def health_check(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
+    return {"status": "ok", "database": "connected"}
