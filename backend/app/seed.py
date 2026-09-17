@@ -67,7 +67,7 @@ def seed():
         #   2. for each sector dict, build a Sector(...) and append it to
         #      crag.sectors (SQLAlchemy will wire up crag_id automatically
         #      via the relationship when you commit)
-        #   3. db.add(crag)
+        #   3. db.add( crag)
         # then db.commit()
         for crag_data in CRAGS:
             crag_fields = {k: v for k, v in crag_data.items() if k != "sectors"}

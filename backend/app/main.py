@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.routers import crags
+from app.routers import crags, sectors
 from app.dependencies import get_db
 
 
@@ -12,6 +12,12 @@ app = FastAPI(
 )
 
 app.include_router(crags.router, prefix="/crags", tags=["crags"])
+app.include_router(sectors.router, prefix="/sectors", tags=["sectors"])
+
+@app.get("/")
+def root():
+    return {"message": "Welcome to CragMatch API"}
+
 
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
