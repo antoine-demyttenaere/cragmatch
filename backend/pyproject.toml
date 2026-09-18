@@ -9,5 +9,11 @@ dependencies = [
     "fastapi[standard]>=0.141.1",
     "psycopg[binary]>=3.3.5",
     "pydantic-settings>=2.15.0",
+    "pytest>=9.1.1",
     "sqlalchemy>=2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
 ]
