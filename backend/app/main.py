@@ -1,9 +1,12 @@
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.routers import crags, sectors
 from app.dependencies import get_db
+
+
 
 
 app = FastAPI(
@@ -13,6 +16,13 @@ app = FastAPI(
         "range, style, and travel distance from a starting point."
     ),
     version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Vite's default dev server
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(crags.router, prefix="/crags", tags=["crags"])
