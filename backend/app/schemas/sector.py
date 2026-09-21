@@ -1,6 +1,8 @@
 from pydantic import BaseModel, Field
 
 from app.models import ClimbingStyle
+from app.schemas.crag import CragSummary
+
 
 
 class SectorBase(BaseModel):
@@ -23,4 +25,6 @@ class SectorCreate(SectorBase):
 
 class SectorRead(SectorBase):
     id: int
+    crag: CragSummary
     model_config = {"from_attributes": True}
+
