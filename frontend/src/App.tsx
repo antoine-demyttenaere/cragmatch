@@ -1,25 +1,15 @@
 import { useState } from "react";
 
+import type { Sector } from "./types";
+
+import SectorCard from "./SectorCard";
+
+
 const BARCELONA = { lat: 41.3874, lon: 2.1686 };
 
 const GRADES = ["4", "5", "5+", "6a", "6a+", "6b", "6b+", "6c", "6c+", "7a", "7a+", "7b", "7b+", "7c", "7c+", "8a", "8a+", "8b", "8b+", "8c", "8c+", "9a"];
 
 type ClimbingStyle = "sport" | "boulder" | "trad" | "multi-pitch";
-
-interface Sector {
-  id: number;
-  name: string;
-  style: ClimbingStyle;
-  grade_min: string;
-  grade_max: string;
-  crag_id: number;
-  crag: {
-    id: number;
-    name: string;
-    region: string;
-  };
-}
-
 
 function App() {
   const [minGrade, setMinGrade] = useState("6a");
@@ -29,6 +19,26 @@ function App() {
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<"name" | "grade">("name");
+
+  // TODO: compute a *sorted copy* of `sectors` for rendering — don't
+  // mutate `sectors` itself (Array.prototype.sort() sorts in place,
+  // which is a common React bug source: it can mutate state without
+  // React noticing, since the array reference doesn't change).
+  // [...sectors].sort((a, b) => ...) makes a copy first, then sorts that.
+  //
+  // For sortBy === "name": alphabetical, a.name.localeCompare(b.name)
+  // For sortBy === "grade": use your backend's grade ordering concept —
+  // for now, just sort by grade_min as a plain string (imperfect vs
+  // true French-grade order, but consistent with what the user sees
+  // without duplicating app/grades.py's logic in TypeScript yet).
+  const sortedSectors = [...sectors].sort((a, b) => {
+    if (sortBy === "name") {
+      return a.name.localeCompare(b.name);
+    }
+    return a.grade_min.localeCompare(b.grade_min);
+  });
+
 
 
   async function handleSubmit(e: React.FormEvent) {
@@ -48,10 +58,6 @@ function App() {
 
     try {
       const response = await fetch(`http://localhost:8000/sectors/search?${params}`);
-      // TODO: what should happen if response.ok is false? (e.g. your
-      // backend's 400 "Invalid grade" case). Throw an Error with a useful
-      // message so the catch block below handles it — don't let a 4xx
-      // silently fall through to .json() as if it succeeded.
       if (!response.ok) {
         const body = await response.json();
         throw new Error(body.detail ?? "Failed to fetch sectors");
@@ -106,14 +112,21 @@ function App() {
 
         <button type="submit">Search</button>
       </form>
+      
+      <label>
+        Sort by:
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as "name" | "grade")}>
+          <option value="name">Name</option>
+          <option value="grade">Grade (easiest first)</option>
+        </select>
+      </label>
+
       {loading && <p>Searching...</p>}
       {error && <p style={{ color: "red" }}>Error: {error}</p>}
       {!loading && !error && sectors.length === 0 && <p>No matches yet — try a search.</p>}
       <ul>
-        {sectors.map((sector) => (
-          <li key={sector.id}>
-            {sector.name} ({sector.crag.name}) — {sector.style} — {sector.grade_min} to {sector.grade_max}
-          </li>
+        {sortedSectors.map((sector) => (
+          <SectorCard key={sector.id} sector={sector} />
         ))}
       </ul>
     </div>
