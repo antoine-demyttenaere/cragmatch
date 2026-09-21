@@ -12,6 +12,9 @@ from app.schemas.sector import SectorCreate, SectorRead
 from app.models import ClimbingStyle
 from sqlalchemy.exc import IntegrityError
 
+from sqlalchemy.orm import joinedload
+
+
 router = APIRouter()
 
 @router.get(
@@ -21,7 +24,8 @@ router = APIRouter()
     description="Return every climbing sector in the database, across all crags.",
 )
 def list_sectors(db: Session = Depends(get_db)):
-    return db.query(Sector).all()
+    return db.query(Sector).options(joinedload(Sector.crag)).all()
+
 
 
 @router.get(
@@ -54,7 +58,8 @@ def search_sectors(
     if min_grade not in GRADE_ORDER or max_grade not in GRADE_ORDER:
         raise HTTPException(status_code=400, detail="Invalid grade")
 
-    sectors = db.query(Sector).all()
+    sectors = db.query(Sector).options(joinedload(Sector.crag)).all()
+
     filtered_sectors = [
         sector for sector in sectors
         if ranges_overlap(sector.grade_min, sector.grade_max, min_grade, max_grade)

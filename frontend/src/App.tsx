@@ -13,7 +13,13 @@ interface Sector {
   grade_min: string;
   grade_max: string;
   crag_id: number;
+  crag: {
+    id: number;
+    name: string;
+    region: string;
+  };
 }
+
 
 function App() {
   const [minGrade, setMinGrade] = useState("6a");
@@ -106,7 +112,7 @@ function App() {
       <ul>
         {sectors.map((sector) => (
           <li key={sector.id}>
-            {sector.name} — {sector.style} — {sector.grade_min} to {sector.grade_max}
+            {sector.name} ({sector.crag.name}) — {sector.style} — {sector.grade_min} to {sector.grade_max}
           </li>
         ))}
       </ul>
