@@ -21,17 +21,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"name" | "grade">("name");
 
-  // TODO: compute a *sorted copy* of `sectors` for rendering — don't
-  // mutate `sectors` itself (Array.prototype.sort() sorts in place,
-  // which is a common React bug source: it can mutate state without
-  // React noticing, since the array reference doesn't change).
-  // [...sectors].sort((a, b) => ...) makes a copy first, then sorts that.
-  //
-  // For sortBy === "name": alphabetical, a.name.localeCompare(b.name)
-  // For sortBy === "grade": use your backend's grade ordering concept —
-  // for now, just sort by grade_min as a plain string (imperfect vs
-  // true French-grade order, but consistent with what the user sees
-  // without duplicating app/grades.py's logic in TypeScript yet).
+
   const sortedSectors = [...sectors].sort((a, b) => {
     if (sortBy === "name") {
       return a.name.localeCompare(b.name);
@@ -112,7 +102,7 @@ function App() {
 
         <button type="submit">Search</button>
       </form>
-      
+
       <label>
         Sort by:
         <select value={sortBy} onChange={(e) => setSortBy(e.target.value as "name" | "grade")}>
