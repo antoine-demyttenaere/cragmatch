@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 
+from app.search import find_matching_sectors
+
 from app.grades import ranges_overlap, GRADE_ORDER
 from app.geo import haversine_km
 
@@ -55,25 +57,11 @@ def search_sectors(
     ),
     db: Session = Depends(get_db),
 ):
-    if min_grade not in GRADE_ORDER or max_grade not in GRADE_ORDER:
+    try:
+        return find_matching_sectors(db, min_grade, max_grade, style, origin_lat, origin_lon, max_distance_km)
+    except ValueError:
         raise HTTPException(status_code=400, detail="Invalid grade")
 
-    sectors = db.query(Sector).options(joinedload(Sector.crag)).all()
-
-    filtered_sectors = [
-        sector for sector in sectors
-        if ranges_overlap(sector.grade_min, sector.grade_max, min_grade, max_grade)
-    ]
-    if style is not None:
-        filtered_sectors = [s for s in filtered_sectors if s.style == style]
-
-    if origin_lat is not None and origin_lon is not None and max_distance_km is not None:
-        filtered_sectors = [
-            sector for sector in filtered_sectors
-            if haversine_km(sector.crag.latitude, sector.crag.longitude, origin_lat, origin_lon) <= max_distance_km
-        ]
-
-    return filtered_sectors
 
 
 @router.get(

@@ -1,4 +1,4 @@
-## Running locally
+﻿## Running locally
 
 ### Prerequisites
 - Docker Desktop

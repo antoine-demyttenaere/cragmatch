@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.routers import crags, sectors
+from app.routers import crags, sectors, natural_search
 from app.dependencies import get_db
 
 
@@ -27,6 +27,8 @@ app.add_middleware(
 
 app.include_router(crags.router, prefix="/crags", tags=["crags"])
 app.include_router(sectors.router, prefix="/sectors", tags=["sectors"])
+app.include_router(natural_search.router, prefix="/search", tags=["natural-search"])
+
 
 @app.get("/")
 def root():
