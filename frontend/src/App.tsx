@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { Sector } from "./types";
+import type { Sector, ParsedFilters } from "./types";
 
 import SectorCard from "./SectorCard";
 
@@ -20,6 +20,9 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"name" | "grade">("name");
+  const [nlQuery, setNlQuery] = useState("");
+  const [nlParsedFilters, setNlParsedFilters] = useState<ParsedFilters | null>(null);
+
 
 
   const sortedSectors = [...sectors].sort((a, b) => {
@@ -29,6 +32,36 @@ function App() {
     return a.grade_min.localeCompare(b.grade_min);
   });
 
+
+
+  async function handleNaturalSearch(e: React.FormEvent) {
+    e.preventDefault();
+
+    setLoading(true);
+    setError(null);
+    setNlParsedFilters(null);
+
+    try {
+      const response = await fetch("http://localhost:8000/search/natural", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: nlQuery }),
+      });
+
+      if (!response.ok) {
+        const body = await response.json();
+        throw new Error(body.detail ?? "Failed to fetch sectors");
+      }
+
+      const data = await response.json();
+      setSectors(data.results);
+      setNlParsedFilters(data.parsed_filters);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  }
 
 
   async function handleSubmit(e: React.FormEvent) {
@@ -45,6 +78,7 @@ function App() {
 
     setLoading(true);
     setError(null);
+    setNlParsedFilters(null);   // clear any stale "Searching: ..." from a previous NL search
 
     try {
       const response = await fetch(`http://localhost:8000/sectors/search?${params}`);
@@ -102,6 +136,27 @@ function App() {
 
         <button type="submit">Search</button>
       </form>
+
+      <form onSubmit={handleNaturalSearch}>
+        <label>
+          Describe your ideal climbing day:
+          <input
+            type="text"
+            value={nlQuery}
+            onChange={(e) => setNlQuery(e.target.value)}
+            placeholder="somewhere 6a-7a, 1.5h from Barcelona, sport climbing"
+          />
+        </label>
+        <button type="submit">Search</button>
+      </form>
+
+      {nlParsedFilters && (
+        <p>
+          Searching: {nlParsedFilters.min_grade}–{nlParsedFilters.max_grade}
+          {nlParsedFilters.style ? `, ${nlParsedFilters.style}` : ""}
+          , ≤{nlParsedFilters.max_distance_km}km
+        </p>
+      )}
 
       <label>
         Sort by:

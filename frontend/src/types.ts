@@ -11,3 +11,11 @@ export interface Sector {
     region: string;
   };
 }
+
+export interface ParsedFilters {
+  understood: boolean;
+  min_grade: string;
+  max_grade: string;
+  max_distance_km: number;
+  style: string | null;
+}
