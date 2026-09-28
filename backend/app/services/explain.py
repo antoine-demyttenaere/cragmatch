@@ -25,7 +25,7 @@ honestly (e.g. "Short approach, but it can get crowded")."""
 
 
 def _describe(sector: Sector) -> str:
-    return f"id={sector.id} | {sector.name} ({sector.crag.name}) | {sector.style} | {sector.grade_min} to {sector.grade_max} | {sector.approach_notes}"
+    return f"id={sector.id} | {sector.name} ({sector.crag.name}) | {sector.style.value} | {sector.grade_min} to {sector.grade_max} | {sector.approach_notes}"
 
 
 def explain_matches(query: str, sectors: list[Sector]) -> dict[int, str]:
@@ -42,6 +42,9 @@ def explain_matches(query: str, sectors: list[Sector]) -> dict[int, str]:
         messages=[{"role": "user", "content": user_message}],
         output_format=MatchReasons,
     )
+
+    log_usage("explain", response)
+
     reasons = response.parsed_output.reasons
     return {reason.sector_id: reason.reason for reason in reasons}
 

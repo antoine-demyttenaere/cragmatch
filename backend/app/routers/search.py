@@ -14,8 +14,11 @@ from app.schemas.search import (
 from app.services.embedding import embed_query
 from app.services.search import find_matching_sectors
 
-from app.services.llm import LLM_MODEL, client
+from app.services.llm import LLM_MODEL, client, log_usage
 from app.services.explain import explain_matches
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter()
@@ -55,11 +58,16 @@ def search_natural(request: NaturalSearchRequest, db: Session = Depends(get_db))
             messages=[{"role": "user", "content": request.query}],
             output_format=ParsedFilters,
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("Failed to parse natural language query")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to parse natural language query: {str(e)}",
+            status_code=503,
+            detail="The search assistant is unavailable, try the search form instead.",
         )
+
+    
+    log_usage("natural_search", response)
+    
     
     filters = response.parsed_output
 
@@ -111,6 +119,7 @@ def search_similar(request: SimilarSearchRequest, db: Session = Depends(get_db))
     try:
         query_vec = embed_query(request.query)
     except Exception:
+        logger.exception("Failed to embed query")
         raise HTTPException(
             status_code=503,
             detail="Couldn't reach the embedding service, try again later.",
@@ -133,6 +142,7 @@ def search_similar(request: SimilarSearchRequest, db: Session = Depends(get_db))
     try:
         reasons = explain_matches(request.query, sectors)
     except Exception:
+        logger.exception("explain_matches failed; returning results without reasons")
         reasons = {}
 
     return SimilarSearchResponse(
