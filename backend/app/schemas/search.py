@@ -36,6 +36,7 @@ class SimilarSearchRequest(BaseModel):
 class SimilarMatch(BaseModel):
     sector: SectorRead
     similarity: float = Field(description="1 - cosine distance; closer to 1 is more similar.")
+    reason: str | None = Field(default=None, description="Why this sector fits the search. Null if the explanation couldn't be generated.")
 
 
 class SimilarSearchResponse(BaseModel):
