@@ -1,8 +1,6 @@
-import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.config import settings
 from app.core.dependencies import get_db
 from app.models import ClimbingStyle, Sector
 from app.schemas.search import (
@@ -16,9 +14,11 @@ from app.schemas.search import (
 from app.services.embedding import embed_query
 from app.services.search import find_matching_sectors
 
-router = APIRouter()
+from app.services.llm import LLM_MODEL, client
+from app.services.explain import explain_matches
 
-client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+
+router = APIRouter()
 
 SYSTEM_PROMPT = """You extract structured climbing search filters from a
 natural-language request. The user is in Barcelona, Catalonia, looking for
@@ -49,7 +49,7 @@ climbing sectors.
 def search_natural(request: NaturalSearchRequest, db: Session = Depends(get_db)):
     try:
         response = client.messages.parse(
-            model="claude-sonnet-5",
+            model=LLM_MODEL,
             max_tokens=1024,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": request.query}],
@@ -128,9 +128,16 @@ def search_similar(request: SimilarSearchRequest, db: Session = Depends(get_db))
         .all()
     )
 
+    sectors = [sector for sector, _ in rows]
+
+    try:
+        reasons = explain_matches(request.query, sectors)
+    except Exception:
+        reasons = {}
+
     return SimilarSearchResponse(
         results=[
-            SimilarMatch(sector=sector, similarity=1 - dist)
+            SimilarMatch(sector=sector, similarity=1 - dist, reason=reasons.get(sector.id))
             for sector, dist in rows
         ]
     )
