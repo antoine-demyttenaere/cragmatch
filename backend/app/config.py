@@ -7,7 +7,8 @@ class Settings(BaseSettings):
     postgres_db: str
     postgres_host: str
     postgres_port: int
-    anthropic_api_key: str   # NEW
+    anthropic_api_key: str 
+    voyage_api_key: str  
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="CRAGMATCH_")
 
