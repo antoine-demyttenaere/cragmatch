@@ -8,6 +8,11 @@ from app.routers import crags, search, sectors
 
 import logging
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+from app.core.rate_limit import limiter
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -22,6 +27,12 @@ app = FastAPI(
     ),
     version="0.1.0",
 )
+
+
+app.state.limiter = limiter
+# Turns a RateLimitExceeded exception into a proper 429 response.
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 app.add_middleware(
     CORSMiddleware,

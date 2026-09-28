@@ -1,14 +1,13 @@
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 
+from app.core.config import settings
 from app.core.database import Base
 from app.core.dependencies import get_db
+from app.core.rate_limit import limiter
 from app.main import app
-from app.core.config import settings
-
-from sqlalchemy import text
 
 # Same connection, different database name — swap "cragmatch" for
 # "cragmatch_test" in the URL your app already builds.
@@ -25,6 +24,13 @@ TestingSessionLocal = sessionmaker(bind=test_engine, autoflush=False, autocommit
 @pytest.fixture(scope="session", autouse=True)
 def setup_schema():
     # Runs once before any test, and once after the whole suite finishes.
+
+    # Every TestClient request comes from the same "IP", so with the limiter
+    # on, tests would start getting 429s once they add up to 10 calls to a
+    # limited endpoint, depending on test order. Off for the whole run;
+    # test_similar_is_rate_limited switches it back on for itself.
+    limiter.enabled = False
+
     with test_engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(bind=test_engine)
