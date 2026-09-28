@@ -1,11 +1,8 @@
-import voyageai
 from sqlalchemy.orm import joinedload
 
-from app.config import settings
-from app.database import SessionLocal
+from app.core.database import SessionLocal
 from app.models import Sector
-
-voyage = voyageai.Client(api_key=settings.voyage_api_key)
+from app.services.embedding import EMBED_MODEL, voyage
 
 # Illustrative notes for testing fuzzy search, not verified beta.
 NOTES = {
@@ -40,7 +37,7 @@ def main():
 
         # 2. Embed all texts in ONE API call (a list in, a list out, same order)
         texts = [build_text(s) for s in sectors]
-        result = voyage.embed(texts, model="voyage-3.5", input_type="document")
+        result = voyage.embed(texts, model=EMBED_MODEL, input_type="document")
 
         # 3. loop over sectors and result.embeddings together (zip),
         #    assigning each vector to sector.embedding. Then db.commit().

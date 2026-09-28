@@ -1,4 +1,4 @@
-from app.geo import haversine_km
+from app.services.geo import haversine_km
 
 
 def test_known_distance_barcelona_to_siurana():

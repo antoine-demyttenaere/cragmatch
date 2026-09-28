@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Sector, ClimbingStyle
-from app.grades import GRADE_ORDER, ranges_overlap
-from app.geo import haversine_km
+from app.services.grades import GRADE_ORDER, ranges_overlap
+from app.services.geo import haversine_km
 
 
 def find_matching_sectors(

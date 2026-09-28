@@ -1,4 +1,4 @@
-from app.database import SessionLocal
+from app.core.database import SessionLocal
 from app.models import Crag, Sector, ClimbingStyle
 
 CRAGS = [

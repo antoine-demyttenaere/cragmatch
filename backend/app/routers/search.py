@@ -1,15 +1,12 @@
 import anthropic
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.config import settings
-from app.dependencies import get_db
+from app.core.config import settings
+from app.core.dependencies import get_db
 from app.models import ClimbingStyle
-from app.schemas.sector import SectorRead
-from app.search import find_matching_sectors
-
-
+from app.schemas.search import NaturalSearchRequest, NaturalSearchResponse, ParsedFilters
+from app.services.search import find_matching_sectors
 
 router = APIRouter()
 
@@ -38,31 +35,6 @@ climbing sectors.
 - style: "sport", "boulder", "trad", or "multi-pitch" if mentioned, otherwise
   null.
 """
-
-
-class NaturalSearchRequest(BaseModel):
-    query: str
-
-
-class ParsedFilters(BaseModel):
-    understood: bool = Field(
-        description=(
-            "False if the query has no discernible connection to a "
-            "climbing search — no grade, location, or style "
-            "signal at all (e.g. off-topic, gibberish, or a completely "
-            "unrelated question). True otherwise, even for vague queries "
-            "like 'something easy near Barcelona'."
-        )
-    )
-    min_grade: str = Field(description="Easiest French grade, e.g. '6a'.")
-    max_grade: str = Field(description="Hardest French grade, e.g. '7a'.")
-    max_distance_km: float = Field(description="Estimated straight-line km from Barcelona.")
-    style: str | None = Field(default=None, description="Climbing style, or null.")
-
-
-class NaturalSearchResponse(BaseModel):
-    parsed_filters: ParsedFilters
-    results: list[SectorRead]
 
 
 @router.post("/natural", response_model=NaturalSearchResponse)
