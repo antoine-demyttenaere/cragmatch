@@ -3,8 +3,13 @@ from app.core.config import settings
 import logging
 logger = logging.getLogger(__name__)
 
-client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-# One place to change the model for every Claude call in the app.
+client = anthropic.Anthropic(
+    api_key=settings.anthropic_api_key,
+    timeout=20.0,     # seconds per attempt (default is 600)
+    max_retries=2,    # the default, written out so it's a visible decision
+    )
+
+
 LLM_MODEL = "claude-sonnet-5"
 
 

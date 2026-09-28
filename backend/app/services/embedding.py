@@ -2,7 +2,11 @@ import voyageai
 
 from app.core.config import settings
 
-voyage = voyageai.Client(api_key=settings.voyage_api_key)
+voyage = voyageai.Client(
+    api_key=settings.voyage_api_key,
+    timeout=10.0,     # seconds per attempt
+    max_retries=2,    # Voyage counts total ATTEMPTS: 2 = 1 try + 1 retry
+)
 EMBED_MODEL = "voyage-3.5"
 
 
