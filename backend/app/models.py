@@ -1,4 +1,5 @@
 from enum import Enum
+from pgvector.sqlalchemy import Vector
 
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -33,4 +34,6 @@ class Sector(Base):
     grade_max: Mapped[str] = mapped_column(String(10))
     crag_id: Mapped[int] = mapped_column(ForeignKey("crags.id"))
     crag: Mapped["Crag"] = relationship(back_populates="sectors")
-    
+
+    approach_notes: Mapped[str | None] = mapped_column(String(500))
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024))
