@@ -26,3 +26,17 @@ class ParsedFilters(BaseModel):
 class NaturalSearchResponse(BaseModel):
     parsed_filters: ParsedFilters
     results: list[SectorRead]
+
+
+class SimilarSearchRequest(BaseModel):
+    query: str = Field(description="Free-text description, e.g. 'quiet crag, short approach'.")
+    limit: int = Field(default=5, ge=1, le=20, description="How many sectors to return.")
+
+
+class SimilarMatch(BaseModel):
+    sector: SectorRead
+    similarity: float = Field(description="1 - cosine distance; closer to 1 is more similar.")
+
+
+class SimilarSearchResponse(BaseModel):
+    results: list[SimilarMatch]

@@ -7,7 +7,7 @@ EMBED_MODEL = "voyage-3.5"
 
 
 def embed_query(text: str) -> list[float]:
-    # TODO: call voyage.embed([text], model=EMBED_MODEL, input_type="query")
-    # and return the single vector (result.embeddings[0]).
-    # Note "query", not "document": this is the search side.
-    ...
+    # input_type="query" (not "document"): this is the search side.
+    result = voyage.embed([text], model=EMBED_MODEL, input_type="query")
+    return result.embeddings[0]
+

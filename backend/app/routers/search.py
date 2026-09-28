@@ -1,11 +1,19 @@
 import anthropic
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
 from app.core.dependencies import get_db
-from app.models import ClimbingStyle
-from app.schemas.search import NaturalSearchRequest, NaturalSearchResponse, ParsedFilters
+from app.models import ClimbingStyle, Sector
+from app.schemas.search import (
+    NaturalSearchRequest,
+    NaturalSearchResponse,
+    ParsedFilters,
+    SimilarMatch,
+    SimilarSearchRequest,
+    SimilarSearchResponse,
+)
+from app.services.embedding import embed_query
 from app.services.search import find_matching_sectors
 
 router = APIRouter()
@@ -87,3 +95,42 @@ def search_natural(request: NaturalSearchRequest, db: Session = Depends(get_db))
         )
 
     return NaturalSearchResponse(parsed_filters=filters, results=results)
+
+
+@router.post(
+    "/similar",
+    response_model=SimilarSearchResponse,
+    summary="Find sectors similar to a free-text description",
+    description=(
+        "Embeds the query with Voyage and ranks sectors by cosine "
+        "similarity to their stored embeddings. For fuzzy asks that don't "
+        "map to hard filters, e.g. 'quiet crag, short approach'."
+    ),
+)
+def search_similar(request: SimilarSearchRequest, db: Session = Depends(get_db)):
+    try:
+        query_vec = embed_query(request.query)
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Couldn't reach the embedding service, try again later.",
+        )
+
+    # pgvector's `<=>` operator: Postgres computes and sorts by the distance.
+    distance = Sector.embedding.cosine_distance(query_vec)
+
+    rows = (
+        db.query(Sector, distance.label("distance"))
+        .options(joinedload(Sector.crag))
+        .filter(Sector.embedding.is_not(None))
+        .order_by(distance)
+        .limit(request.limit)
+        .all()
+    )
+
+    return SimilarSearchResponse(
+        results=[
+            SimilarMatch(sector=sector, similarity=1 - dist)
+            for sector, dist in rows
+        ]
+    )
