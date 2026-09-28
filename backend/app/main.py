@@ -6,6 +6,14 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_db
 from app.routers import crags, search, sectors
 
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
+
 app = FastAPI(
     title="CragMatch API",
     description=(
