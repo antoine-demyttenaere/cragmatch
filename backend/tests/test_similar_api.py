@@ -19,6 +19,7 @@ import pytest
 from app.models import Sector
 from app.routers import search as search_router
 
+from app.core.rate_limit import limiter
 
 DIM = 1024  # must match Vector(1024) on Sector.embedding
 
@@ -186,3 +187,18 @@ def test_similar_still_returns_results_when_explain_fails(client, db_session, mo
     results = response.json()["results"]
     assert len(results) == 1
     assert results[0]["reason"] is None
+
+
+# -----------------Rate limit test-----------------
+
+def test_similar_is_rate_limited(client, monkeypatch):
+    monkeypatch.setattr(limiter, "enabled", True)   # restored automatically after the test
+    limiter.reset()                                  # start from a clean count
+    _fake_query_vector(monkeypatch, _unit(0))
+
+    # Collect every status code first, then compare the whole list: if this
+    # ever fails, pytest shows both lists side by side, so you see exactly
+    # which call was the first to be limited.
+    codes = [client.post("/search/similar", json={"query": "x"}).status_code for _ in range(11)]
+
+    assert codes == [200] * 10 + [429]

@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.rate_limit import limiter
 from app.core.dependencies import get_db
 from app.models import ClimbingStyle, Sector
 from app.schemas.search import (
@@ -49,13 +50,14 @@ climbing sectors.
 
 
 @router.post("/natural", response_model=NaturalSearchResponse)
-def search_natural(request: NaturalSearchRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def search_natural(request: Request, body: NaturalSearchRequest, db: Session = Depends(get_db)):
     try:
         response = client.messages.parse(
             model=LLM_MODEL,
             max_tokens=1024,
             system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": request.query}],
+            messages=[{"role": "user", "content": body.query}],
             output_format=ParsedFilters,
         )
     except Exception:
@@ -115,9 +117,10 @@ def search_natural(request: NaturalSearchRequest, db: Session = Depends(get_db))
         "map to hard filters, e.g. 'quiet crag, short approach'."
     ),
 )
-def search_similar(request: SimilarSearchRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def search_similar(request: Request, body: SimilarSearchRequest, db: Session = Depends(get_db)):
     try:
-        query_vec = embed_query(request.query)
+        query_vec = embed_query(body.query)
     except Exception:
         logger.exception("Failed to embed query")
         raise HTTPException(
@@ -133,14 +136,14 @@ def search_similar(request: SimilarSearchRequest, db: Session = Depends(get_db))
         .options(joinedload(Sector.crag))
         .filter(Sector.embedding.is_not(None))
         .order_by(distance)
-        .limit(request.limit)
+        .limit(body.limit)
         .all()
     )
 
     sectors = [sector for sector, _ in rows]
 
     try:
-        reasons = explain_matches(request.query, sectors)
+        reasons = explain_matches(body.query, sectors)
     except Exception:
         logger.exception("explain_matches failed; returning results without reasons")
         reasons = {}
