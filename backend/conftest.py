@@ -8,6 +8,8 @@ from app.dependencies import get_db
 from app.main import app
 from app.config import settings
 
+from sqlalchemy import text
+
 # Same connection, different database name — swap "cragmatch" for
 # "cragmatch_test" in the URL your app already builds.
 TEST_DATABASE_URL = (
@@ -23,6 +25,8 @@ TestingSessionLocal = sessionmaker(bind=test_engine, autoflush=False, autocommit
 @pytest.fixture(scope="session", autouse=True)
 def setup_schema():
     # Runs once before any test, and once after the whole suite finishes.
+    with test_engine.begin() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(bind=test_engine)
     yield
     Base.metadata.drop_all(bind=test_engine)

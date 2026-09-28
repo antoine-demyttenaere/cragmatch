@@ -17,8 +17,9 @@ class SectorBase(BaseModel):
         examples=["7a+"],
     )
     crag_id: int = Field(description="ID of the crag this sector belongs to.")
-
-
+    approach_notes: str | None = Field(default=None, description="Notes about approaching the sector.")
+   
+   
 class SectorCreate(SectorBase):
     pass
 
