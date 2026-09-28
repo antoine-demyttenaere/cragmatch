@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_db
+from app.core.dependencies import get_db
 from app.models import Crag
 from app.schemas.crag import CragCreate, CragRead
 

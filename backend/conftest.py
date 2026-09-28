@@ -3,10 +3,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
 
-from app.database import Base
-from app.dependencies import get_db
+from app.core.database import Base
+from app.core.dependencies import get_db
 from app.main import app
-from app.config import settings
+from app.core.config import settings
 
 from sqlalchemy import text
 

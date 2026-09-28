@@ -1,21 +1,11 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
-
-from app.search import find_matching_sectors
-
-from app.grades import ranges_overlap, GRADE_ORDER
-from app.geo import haversine_km
-
-from sqlalchemy.orm import Session
-
-from app.dependencies import get_db
-from app.models import Sector
-from app.schemas.sector import SectorCreate, SectorRead
-
-from app.models import ClimbingStyle
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, joinedload
 
-from sqlalchemy.orm import joinedload
-
+from app.core.dependencies import get_db
+from app.models import ClimbingStyle, Sector
+from app.schemas.sector import SectorCreate, SectorRead
+from app.services.search import find_matching_sectors
 
 router = APIRouter()
 

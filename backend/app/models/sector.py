@@ -1,10 +1,15 @@
 from enum import Enum
-from pgvector.sqlalchemy import Vector
+from typing import TYPE_CHECKING
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database import Base
+from app.core.database import Base
+
+if TYPE_CHECKING:
+    from app.models.crag import Crag
+
 
 class ClimbingStyle(str, Enum):
     SPORT = "sport"
@@ -13,20 +18,9 @@ class ClimbingStyle(str, Enum):
     MULTI_PITCH = "multi-pitch"
 
 
-class Crag(Base):
-    __tablename__ = "crags"
-    
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(100))
-    region: Mapped[str] = mapped_column(String(100))
-    latitude: Mapped[float]
-    longitude: Mapped[float]
-    sectors: Mapped[list["Sector"]] = relationship(back_populates="crag")
-
-
 class Sector(Base):
     __tablename__ = "sectors"
-    
+
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100))
     style: Mapped[ClimbingStyle]

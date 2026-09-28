@@ -1,6 +1,6 @@
 import pytest
 
-from app.grades import grade_rank, ranges_overlap, GRADE_ORDER
+from app.services.grades import grade_rank, ranges_overlap, GRADE_ORDER
  
 
 def test_grade_order_length():

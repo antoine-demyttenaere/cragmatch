@@ -18,7 +18,7 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-from app.database import Base
+from app.core.database import Base
 from app import models   # noqa: F401 — import needed so Crag/Sector register on Base.metadata
 
 target_metadata = Base.metadata
@@ -62,7 +62,7 @@ def run_migrations_online() -> None:
 
     """
 
-    from app.config import settings
+    from app.core.config import settings
     config.set_main_option("sqlalchemy.url", settings.database_url)
 
 
