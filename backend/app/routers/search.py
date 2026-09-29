@@ -13,6 +13,7 @@ from app.schemas.search import (
     SimilarSearchResponse,
 )
 from app.services.embedding import embed_query
+from app.services.geo import BARCELONA
 from app.services.search import find_matching_sectors
 
 from app.services.llm import LLM_MODEL, client, log_usage
@@ -94,8 +95,8 @@ def search_natural(request: Request, body: NaturalSearchRequest, db: Session = D
             min_grade=filters.min_grade,
             max_grade=filters.max_grade,
             style=style,
-            origin_lat=41.3874,
-            origin_lon=2.1686,
+            origin_lat=BARCELONA[0],
+            origin_lon=BARCELONA[1],
             max_distance_km=filters.max_distance_km,
         )
     except ValueError:
