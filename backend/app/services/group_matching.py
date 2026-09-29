@@ -175,3 +175,4 @@ def score_sectors(
 
     results.sort(key=lambda r: (-r.fit_count, r.distance_km, r.sector.name))
     return results
+ 
