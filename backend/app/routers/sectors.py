@@ -3,11 +3,21 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.dependencies import get_db
-from app.models import ClimbingStyle, Sector
+from app.models import ClimbingStyle, Sector, StayType
 from app.schemas.sector import SectorCreate, SectorRead
+from app.schemas.stay import NearbyStay
 from app.services.search import find_matching_sectors
+from app.services.stays import find_stays_near
 
 router = APIRouter()
+
+
+def load_sector(sector_id: int, db: Session = Depends(get_db)) -> Sector:
+    """Dependency: the sector named by {sector_id} (with its crag), or 404."""
+    sector = db.query(Sector).options(joinedload(Sector.crag)).filter(Sector.id == sector_id).first()
+    if sector is None:
+        raise HTTPException(status_code=404, detail="Sector not found")
+    return sector
 
 @router.get(
     "/",
@@ -65,6 +75,25 @@ def get_sector(sector_id: int, db: Session = Depends(get_db)):
     if sector is None:
         raise HTTPException(status_code=404, detail="Sector not found")
     return sector
+
+
+@router.get(
+    "/{sector_id}/stays",
+    response_model=list[NearbyStay],
+    summary="Places to stay near a sector",
+    description="Campsites, hostels, refuges... near the sector's crag, closest first.",
+)
+def sector_stays(
+    type: StayType | None = Query(default=None, description="Only this kind of stay."),
+    max_distance_km: float = Query(default=10, gt=0, le=50),
+    sector: Sector = Depends(load_sector),
+    db: Session = Depends(get_db),
+):
+    nearby = find_stays_near(
+        db, sector.crag.latitude, sector.crag.longitude, max_distance_km,
+        stay_type=type.value if type else None,
+    )
+    return [NearbyStay(stay=stay, distance_km=round(d, 1)) for stay, d in nearby]
 
 
 @router.post(

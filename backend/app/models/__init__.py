@@ -4,5 +4,6 @@ from app.models.crag import Crag
 from app.models.sector import ClimbingStyle, Sector
 from app.models.member import Member
 from app.models.group import Group
+from app.models.stay import Stay, StaySource, StayType
 
-__all__ = ["Crag", "Sector", "ClimbingStyle", "Member", "Group"]
+__all__ = ["Crag", "Sector", "ClimbingStyle", "Member", "Group", "Stay", "StayType", "StaySource"]
