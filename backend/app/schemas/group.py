@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models import ClimbingStyle
+from app.schemas.sector import SectorRead
 from app.services.grades import GRADE_ORDER, grade_rank
 
 
@@ -55,3 +56,40 @@ class GroupRead(BaseModel):
     share_code: str
     members: list[MemberRead]
     model_config = {"from_attributes": True}
+
+
+# --- Group search ---------------------------------------------------------
+
+
+class MergedFilters(BaseModel):
+    """Strict mode only: the filters the whole group agreed on."""
+    grade_min: str
+    grade_max: str
+    max_distance_km: float | None = Field(description="None = no distance limit.")
+    styles: list[str] | None = Field(description="None = any style.")
+
+
+class MemberMisfit(BaseModel):
+    name: str
+    reason: str = Field(description="e.g. 'too easy', 'too far (112 km > 80 km)'.")
+
+
+class GroupSectorMatch(BaseModel):
+    sector: SectorRead
+    distance_km: float = Field(description="Straight-line distance from Barcelona.")
+    fit_count: int
+    member_count: int
+    fits: list[str] = Field(description="Names of the members this sector fits.")
+    misfits: list[MemberMisfit] = Field(description="Members it doesn't fit, and why.")
+
+
+class GroupSearchResponse(BaseModel):
+    mode: str
+    fit: str
+    member_count: int
+    common_ground: bool = Field(
+        description="strict: the group's preferences overlap. scored: at least one sector fits everyone."
+    )
+    message: str | None = Field(default=None, description="Why there are no results, when there are none.")
+    filters: MergedFilters | None = None
+    results: list[GroupSectorMatch]

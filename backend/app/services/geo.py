@@ -2,6 +2,9 @@ import math
 
 EARTH_RADIUS_KM = 6371.0
 
+# Everyone searches from Barcelona for now (lat, lon).
+BARCELONA = (41.3874, 2.1686)
+
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Straight-line ('as the crow flies') distance in km between two
