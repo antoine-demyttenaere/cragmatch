@@ -1,8 +1,11 @@
+from datetime import date, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.dependencies import get_db
-from app.models import Group, Member
+from app.models import Group, Member, Sector, StayType
+from app.routers.sectors import load_sector
 from app.schemas.group import (
     GroupCreate,
     GroupRead,
@@ -10,9 +13,11 @@ from app.schemas.group import (
     MemberCreate,
     MemberRead,
 )
+from app.schemas.stay import BookingLinks, GroupStaysResponse, NearbyStay
 from app.services.group_matching import FitMode
 from app.services.group_search import SearchMode, search_for_group
 from app.services.groups import generate_share_code
+from app.services.stays import airbnb_url, booking_url, find_stays_near, next_saturday
 
 router = APIRouter()
 
@@ -118,3 +123,48 @@ def search_group(
     # Thin on purpose: all the logic lives in services/, where it's tested
     # directly and (in Stage 6) callable as an agent tool.
     return search_for_group(db, group.members, mode=mode, fit=fit)
+
+
+@router.get(
+    "/{code}/sectors/{sector_id}/stays",
+    response_model=GroupStaysResponse,
+    summary="Places to stay near a sector, for this group",
+    description=(
+        "Nearby stays plus prefilled Airbnb / Booking.com searches for the "
+        "group's dates and size. guests defaults to the number of members."
+    ),
+)
+def group_sector_stays(
+    nights: int = Query(default=2, ge=1, le=30),
+    guests: int | None = Query(default=None, ge=1, le=30),
+    checkin: date | None = Query(default=None, description="Defaults to next Saturday."),
+    type: StayType | None = Query(default=None),
+    max_distance_km: float = Query(default=10, gt=0, le=50),
+    group: Group = Depends(get_group),
+    sector: Sector = Depends(load_sector),
+    db: Session = Depends(get_db),
+):
+    guests = guests or max(len(group.members), 1)
+    checkin = checkin or next_saturday()
+    if checkin < date.today():
+        raise HTTPException(status_code=422, detail="checkin can't be in the past")
+    checkout = checkin + timedelta(days=nights)
+
+    crag = sector.crag
+    nearby = find_stays_near(
+        db, crag.latitude, crag.longitude, max_distance_km,
+        stay_type=type.value if type else None,
+    )
+    return GroupStaysResponse(
+        sector_id=sector.id,
+        sector_name=sector.name,
+        crag_name=crag.name,
+        guests=guests,
+        checkin=checkin,
+        checkout=checkout,
+        stays=[NearbyStay(stay=stay, distance_km=round(d, 1)) for stay, d in nearby],
+        links=BookingLinks(
+            airbnb=airbnb_url(crag.latitude, crag.longitude, checkin, checkout, guests),
+            booking=booking_url(crag.name, crag.latitude, crag.longitude, checkin, checkout, guests),
+        ),
+    )
