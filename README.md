@@ -22,7 +22,12 @@ First time only, fill the database with sample data:
 ```
 uv run python -m app.scripts.seed             # crags + sectors
 uv run python -m app.scripts.embed_sectors    # approach notes + Voyage embeddings
+uv run python -m app.scripts.seed_stays       # hand-picked stays (run before the import)
+uv run python -m app.scripts.import_stays     # campsites/hostels/huts from OpenStreetMap
 ```
+`import_stays` calls the free public Overpass API, which is often busy. If a
+crag fails, just run it again later: finished crags come from the cache in
+`backend/.cache/overpass/` (kept a week; `--no-cache` forces fresh data).
 
 ### 3. Frontend
 ```
@@ -43,75 +48,94 @@ uv run pytest
 ```
 backend/
   app/
-    main.py              FastAPI app: creates the app, adds CORS middleware,
-                         mounts the routers below, defines / and /health.
+    main.py              FastAPI app: CORS, rate limiter, mounts the routers,
+                         defines / and /health.
 
     core/                App-wide setup, used by everything else.
-      config.py          Settings loaded from backend/.env (CRAGMATCH_ prefix)
-                         via pydantic-settings: DB credentials, Anthropic and
-                         Voyage API keys. Exposes settings.database_url.
-      database.py        SQLAlchemy engine, SessionLocal (session factory),
-                         and Base (declarative base every model inherits).
-      dependencies.py    get_db() — FastAPI dependency that yields a DB
-                         session per request and always closes it after.
+      config.py          Settings from backend/.env (CRAGMATCH_ prefix): DB
+                         credentials, Anthropic and Voyage API keys.
+      database.py        SQLAlchemy engine, SessionLocal, and Base.
+      dependencies.py    get_db(): one DB session per request, always closed.
+      rate_limit.py      slowapi Limiter (per IP), used on the paid endpoints.
 
     models/              SQLAlchemy ORM models (database tables).
-      crag.py            Crag table; one crag has many sectors.
-      sector.py          Sector table and the ClimbingStyle enum, incl.
-                         approach_notes and the pgvector embedding column.
-      __init__.py        Re-exports every model, so `from app.models import
-                         Crag, Sector` works and all tables register on Base.
+      crag.py            Crag; one crag has many sectors.
+      sector.py          Sector + ClimbingStyle, approach_notes, pgvector embedding.
+      group.py           Group (name, unique share_code); has many members.
+      member.py          Member of a group, with optional preferences
+                         (grade range, max distance, styles; empty = any).
+      stay.py            Stay (campsite/hostel/refuge/...), StayType, StaySource.
+      __init__.py        Re-exports every model so all tables register on Base.
 
-    schemas/             Pydantic request/response shapes, decoupled from
-                         the ORM models.
-      crag.py            CragBase/Create/Read/Summary.
-      sector.py          SectorBase/Create/Read.
-      search.py          Natural-language search: request, ParsedFilters
-                         (what Claude extracts), and the response.
+    schemas/             Pydantic request/response shapes, decoupled from models.
+      crag.py, sector.py Crag/Sector create + read shapes.
+      search.py          Natural-language and similarity search shapes.
+      group.py           Members (with grade validators), groups, and the
+                         group search response (fits / misfits per sector).
+      stay.py            Stays, nearby stays, booking links.
 
     routers/             HTTP endpoints only; logic lives in services/.
-      crags.py           /crags — list, get by id, create.
-      sectors.py         /sectors — list, get by id, create, and
-                         /sectors/search (filter by grade/style/distance).
-      search.py          /search/natural — sends a free-text query to
-                         Claude to extract filters, then runs the search.
+      crags.py           /crags: list, get, create.
+      sectors.py         /sectors: CRUD, /sectors/search, /sectors/{id}/stays.
+      search.py          /search/natural (Claude) and /search/similar (pgvector),
+                         both rate-limited.
+      groups.py          /groups: create, read, add/replace/remove members,
+                         /groups/{code}/search, and group-aware stays.
 
     services/            Plain logic with no HTTP in it, reusable anywhere.
-      grades.py          GRADE_ORDER plus grade_rank() and ranges_overlap().
-      geo.py             haversine_km() — straight-line distance.
-      search.py          find_matching_sectors() — shared filtering used by
-                         both /sectors/search and /search/natural.
-      embedding.py       Voyage client, EMBED_MODEL, and embed_query().
+      grades.py          GRADE_ORDER, grade_rank(), ranges_overlap().
+      geo.py             haversine_km() and the BARCELONA origin.
+      search.py          find_matching_sectors(): the Stage 1 filter logic.
+      llm.py             Anthropic client (timeout/retries) + token usage logging.
+      explain.py         Claude "why this matches" notes for similarity results.
+      embedding.py       Voyage client + embed_query().
+      groups.py          generate_share_code() (secrets, readable alphabet).
+      group_matching.py  PURE (no DB): merge_preferences() for strict mode,
+                         score_sectors() for scored mode.
+      group_search.py    Group search: fetches sectors, calls the pure logic.
+      stays.py           find_stays_near() (bounding box + haversine),
+                         Airbnb / Booking.com prefilled search links.
+      overpass.py        OpenStreetMap: query, fetch (timeout, retries,
+                         fallback server, cache), parse, duplicate detection.
 
     scripts/             Run by hand, not part of the API.
-      seed.py            Inserts sample Catalan crags/sectors.
-      embed_sectors.py   Writes approach notes and stores a Voyage
-                         embedding for every sector.
+      seed.py            Sample Catalan crags/sectors.
+      embed_sectors.py   Approach notes + a Voyage embedding per sector.
+      seed_stays.py      Small hand-picked list of stays (illustrative).
+      import_stays.py    Stays around every crag from OpenStreetMap.
 
-  tests/
-    test_crags_api.py, test_sectors_api.py — API tests using the
-                         conftest.py fixtures (isolated test DB + TestClient).
-    test_geo.py, test_grades.py — unit tests for services/geo.py and
-                         services/grades.py.
-
-  conftest.py            Pytest fixtures: an isolated cragmatch_test
-                         database (with pgvector), a fresh db_session per
-                         test, and a client fixture that overrides get_db.
-
-  alembic/               Migration scripts (alembic upgrade head applies
-                         them). Needed whenever a model's shape changes.
+  tests/                 pytest. External services (Claude, Voyage, Overpass)
+                         are always mocked, so tests never use the network.
+  conftest.py            Isolated cragmatch_test database, a fresh session per
+                         test, TestClient with get_db overridden, limiter off.
+  alembic/               Migrations (alembic upgrade head applies them).
 
 postgres.Dockerfile      Postgres image = postgis/postgis + pgvector.
 
-frontend/
-  src/
-    main.tsx             Entry point — mounts <App /> into the DOM.
-    App.tsx              The whole UI so far: the structured search form,
-                         the natural-language search box, sorting, and the
-                         results list.
-    SectorCard.tsx       Renders a single sector (name, crag, region,
-                         style, grade range) as a list item.
-    types.ts             Shared frontend TypeScript types (Sector,
-                         ParsedFilters) — the TS-side mirror of the
-                         backend's Pydantic schemas.
+frontend/src/
+  main.tsx               Entry point.
+  App.tsx                Two tabs, "Find crags" and "Group trip"; keeps
+                         ?group=CODE in the URL so the link can be shared.
+  SearchPage.tsx         Filter search, natural-language search, vibe search.
+  GroupPage.tsx          Create/join a group, members, strict/scored search
+                         showing who each sector fits and why not.
+  MemberForm.tsx         Add or edit a member's preferences.
+  StaysPanel.tsx         Stays near a sector; in a group, dates/guests and
+                         Airbnb / Booking.com links.
+  SectorCard.tsx         One sector in a result list.
+  api.ts                 apiRequest() + readable error messages.
+  constants.ts           Grades (same order as the backend), styles, stay types.
+  types.ts               TypeScript mirrors of the backend's schemas.
 ```
+
+## Where the stay data comes from
+
+There's no legitimate way to *search* Airbnb or Booking.com from our backend:
+Airbnb has no public search API (and scraping breaks its terms), and
+Booking.com's API is limited to approved partners. So the app combines:
+
+| Source | Good | Limits |
+|---|---|---|
+| Hand-picked list (`seed_stays.py`) | Best quality: places climbers actually use | Small, maintained by hand. The current entries are illustrative placeholders |
+| OpenStreetMap via Overpass (`import_stays.py`) | Free, legal to reuse, real campsites/hostels/huts with coordinates | Messy (missing names, odd tags), no prices or availability, public servers are often busy |
+| Airbnb / Booking.com links | Real availability and prices, on their own site | We only prefill a search (area, dates, guests); the user finishes there. The URL parameters aren't a documented API, so check the links now and then |
