@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol, Sequence
 
 from app.services.geo import haversine_km
-from app.services.grades import GRADE_ORDER, grade_rank, ranges_overlap
+from app.services.grades import GRADE_ORDER, grade_rank
 
 # What "a sector fits a member" means for grades:
 #   overlap: the sector has at least some routes in the member's range

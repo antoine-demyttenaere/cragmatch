@@ -2,11 +2,6 @@ from app.core.database import SessionLocal
 from app.rag.loader import SectorLoader
 from app.rag.vectorstore import get_vector_store
 
-from app.core.database import SessionLocal
-from app.rag.loader import SectorLoader
-from app.rag.vectorstore import get_vector_store
-
-
 
 def main():
     db = SessionLocal()

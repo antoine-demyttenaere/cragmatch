@@ -25,4 +25,11 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "ruff>=0.16.10",
 ]
+
+[tool.ruff.lint]
+# Ruff's default rules: syntax errors, undefined names, unused imports.
+# Real bugs only, no style opinions. Set explicitly so a ruff config
+# elsewhere on this machine can't add rules.
+select = ["E4", "E7", "E9", "F"]
