@@ -1,7 +1,8 @@
 from pydantic import BaseModel, Field
 
 from app.models import Sector
-from app.services.llm import LLM_MODEL, client
+from app.services.llm import LLM_MODEL, client, log_usage
+
 
 
 # The shape we ask Claude to return. These live here, not in schemas/,
