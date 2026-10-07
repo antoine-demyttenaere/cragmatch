@@ -1,6 +1,6 @@
 # 001: Members set a maximum walk-in time, group search respects it
 
-**Status:** Needs answers
+**Status:** Ready
 **Size:** L
 **Raw request:** "Members should be able to say how long they're willing to walk to the crag, and the group search should respect that."
 
@@ -74,20 +74,16 @@ sector, so that the group search doesn't suggest a sector with an approach I won
   read the free text and can be aligned later.
 - Driving time instead of straight-line distance: unrelated to walking.
 
-## Open questions
-- [blocking] Where do sector approach times come from? (suggested default: a
-  structured approach time in minutes per sector, entered by hand for the seeded
-  sectors from the existing notes. Vague notes are mapped as "almost no approach" =
-  2, "short" = 10, "long" = 45. Sectors with no note stay unknown.)
-- [blocking] How is a sector with an unknown approach time treated when a member has a
-  limit? (suggested default: it fits and is never excluded, so missing data doesn't
-  hide sectors. The UI shows "approach unknown".)
-- [non-blocking] Unit and meaning: minutes, one way, car park to the foot of the
-  sector? (suggested default: yes, whole minutes, one way)
-- [non-blocking] Is there an upper bound on the member's limit? (suggested default:
-  1–180 minutes. Anything longer is effectively "no limit".)
-- [non-blocking] Should sector results show the approach time? (suggested default:
-  yes, on the sector card, so members see why a sector was dropped or flagged)
+## Decisions
+- Sector approach time: a new optional `approach_minutes` per sector, entered by
+  hand for the seeded sectors from the existing notes ("almost no approach" = 2,
+  "short" = 10, "long" = 45). Sectors without a note stay unknown (NULL).
+- Unknown approach time: the sector fits every member and is never excluded; the
+  UI shows "approach unknown".
+- Unit: whole minutes, one way, car park to the foot of the sector.
+- Member limit: 1–180 minutes; unset = no limit.
+- Sector cards show the approach time.
+
 
 ## Notes for the tech lead
 - Two migrations are likely: one per new piece of data, on members and on sectors.
