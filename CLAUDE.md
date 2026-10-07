@@ -50,6 +50,10 @@ Backend commands run from `backend/`, frontend commands from `frontend/`.
   `get_member` (`routers/groups.py`), `load_sector` (`routers/sectors.py`).
 - Frontend: `apiRequest()` and `errorMessage()` in `api.ts`; grades/styles in
   `constants.ts`; `types.ts` mirrors the backend schemas (update both together).
+- Grades: `GRADE_ORDER`, `grade_rank()` (raises ValueError for an unknown
+  grade), `ranges_overlap()` in `services/grades.py`. Never compare grade
+  strings directly ("6a" < "6a+").
+
 
 ## Code standards
 - Type hints everywhere; SQLAlchemy 2.0 style (`Mapped[...]`, `mapped_column`).
@@ -90,17 +94,3 @@ Backend commands run from `backend/`, frontend commands from `frontend/`.
 2. Model changes come with a reviewed migration.
 3. New files or folders are added to the structure in `README.md`.
 4. Commit messages say what changed and why, one step per commit.
-
-# CragMatch — project notes
-
-## Database
-- Postgres runs in Docker. Host port is **5433** (docker-compose maps `5433:5432`).
-  Connect from the host with `localhost:5433`; inside the container it's 5432.
-- The app reads the URL from `settings.database_url` (set in `backend/.env`).
-
-## Climbing grades
-- Never compare grade strings directly (`"6a+" < "7a"` sorts alphabetically, which is wrong).
-- Use `grade_rank(grade)` from `backend/app/services/grades.py`. It returns the
-  grade's position in `GRADE_ORDER` (0 = easiest) and raises `ValueError` for an
-  unknown grade. Compare ranks: `grade_rank(a) < grade_rank(b)`.
-- `ranges_overlap(a_min, a_max, b_min, b_max)` checks whether two grade ranges overlap.
