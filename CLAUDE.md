@@ -36,8 +36,6 @@ Backend commands run from `backend/`, frontend commands from `frontend/`.
   `CRAGMATCH_`, file `backend/.env`). Never hardcode keys or passwords.
 
 ## Reuse before writing
-- Grades: `GRADE_ORDER`, `grade_rank()`, `ranges_overlap()` in
-  `services/grades.py`. Never compare grade strings directly ("6a" < "6a+").
 - Distance: `haversine_km()` and `BARCELONA` in `services/geo.py`.
 - Sector filtering: `find_matching_sectors()` in `services/search.py`
   (raises ValueError on bad input; the router maps it to 400).
