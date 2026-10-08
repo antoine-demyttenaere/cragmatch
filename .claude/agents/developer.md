@@ -34,6 +34,9 @@ again. If you disagree with a finding, say why instead of changing it.
 - Edit tickets/ files or backend/.env.
 - Run migrations against the dev database (`alembic upgrade`) unless the
   increment says so. Generating a migration file is fine.
+- Edit files through Bash (sed, python scripts, echo >). Use Edit and
+  Write, so the lint hook sees every change.
+
 
 Your final message goes to the main session: the files you changed, the
 tests you added, the last test and lint results, and any deviation from
