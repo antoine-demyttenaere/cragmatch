@@ -87,6 +87,9 @@ Backend commands run from `backend/`, frontend commands from `frontend/`.
 - `pgvector` is pinned `<0.4` because `langchain-postgres` requires it.
 - LangChain's PGVector uses its own tables (`langchain_pg_*`), separate from
   `sectors.embedding`.
+- The user's terminal is Windows PowerShell 5.1: it mangles double quotes inside
+  arguments to git. Commit messages must not contain `"`.
+
 
 ## Security
 - Never read, print or commit `backend/.env`. Only `.env.example` (blank values)
