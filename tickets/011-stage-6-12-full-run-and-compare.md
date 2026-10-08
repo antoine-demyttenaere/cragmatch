@@ -2,7 +2,7 @@
 
 **Status:** Ready
 **Size:** S
-**Mode:** guide. The user runs and explains; code only for the run script.
+**Mode:** delivery. Built with `/deliver-increment` from a resolution plan: the developer agent writes the code and tests, the tech lead reviews, the user commits.
 **Raw request:** "Run the whole graph end to end on a real group scenario. Ask Claude Code to explain, node by node, what happened on this run. Go back to Step 6.7's paper sketch and check it against what you actually built."
 
 ## User story

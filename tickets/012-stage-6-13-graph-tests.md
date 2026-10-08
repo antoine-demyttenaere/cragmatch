@@ -2,7 +2,7 @@
 
 **Status:** Ready
 **Size:** M
-**Mode:** guide. The user writes the tests (see CLAUDE.local.md). This is a step brief, not for `/deliver-increment`.
+**Mode:** delivery. Built with `/deliver-increment` from a resolution plan: the developer agent writes the code and tests, the tech lead reviews, the user commits.
 **Raw request:** "Test individual nodes in isolation (a node is just a function, so this is straightforward). One test that runs the graph and checks it pauses correctly at the human-in-the-loop step."
 
 ## User story

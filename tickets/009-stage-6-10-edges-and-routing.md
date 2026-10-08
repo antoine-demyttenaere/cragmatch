@@ -2,7 +2,7 @@
 
 **Status:** Ready
 **Size:** S
-**Mode:** guide. The user writes the code (see CLAUDE.local.md). This is a step brief, not for `/deliver-increment`.
+**Mode:** delivery. Built with `/deliver-increment` from a resolution plan: the developer agent writes the code and tests, the tech lead reviews, the user commits.
 **Raw request:** "Now connect the nodes with edges, and only now ask Claude Code to explain the difference between a normal edge and a conditional edge. Add one conditional edge: if the group's merged preferences have no overlap (from Stage 4's 'no common ground' case), route to a different node instead of continuing."
 
 ## User story

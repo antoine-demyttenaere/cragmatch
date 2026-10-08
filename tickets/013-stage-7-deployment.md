@@ -2,7 +2,7 @@
 
 **Status:** Needs answers
 **Size:** L (to be split once the plan is written)
-**Mode:** to decide with the user.
+**Mode:** delivery. Built with `/deliver-increment` from a resolution plan: the developer agent writes the code and tests, the tech lead reviews, the user commits.
 **Raw request:** "7 cloud deployment (to be reworked)."
 
 ## User story

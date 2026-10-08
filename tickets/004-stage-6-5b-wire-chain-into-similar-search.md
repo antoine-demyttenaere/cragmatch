@@ -2,7 +2,7 @@
 
 **Status:** Needs answers
 **Size:** M
-**Mode:** guide. The user writes the code (see CLAUDE.local.md). This is a step brief, not for `/deliver-increment`.
+**Mode:** delivery. Built with `/deliver-increment` from a resolution plan: the developer agent writes the code and tests, the tech lead reviews, the user commits.
 **Raw request:** "Only after that, wire it to the /search/natural fuzzy-matching path from Stage 3, replacing your hand-built version."
 
 ## User story

@@ -2,7 +2,7 @@
 
 **Status:** Ready
 **Size:** S
-**Mode:** guide. The user writes the code (see CLAUDE.local.md). This is a step brief, not for `/deliver-increment`.
+**Mode:** delivery. Built with `/deliver-increment` from a resolution plan: the developer agent writes the code and tests, the tech lead reviews, the user commits.
 **Raw request:** "Build the smallest possible chain: retriever → prompt template → LLM → output, for one hardcoded query. Run it, read the output, then ask Claude Code to walk through the chain step by step with that one example (what went into the prompt template, exactly)."
 
 ## User story
