@@ -14,6 +14,7 @@ class MemberBase(BaseModel):
     grade_min: str | None = None
     grade_max: str | None = None
     max_distance_km: float | None = Field(default=None, gt=0)
+    max_approach_minutes: int | None = Field(default=None, ge=1, le=180)
     styles: list[ClimbingStyle] = []
 
     @field_validator("grade_min", "grade_max")

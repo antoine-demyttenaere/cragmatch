@@ -4,6 +4,8 @@ The matching rules themselves are unit-tested in test_group_matching.py;
 these tests check the HTTP layer and the full flow end to end.
 """
 
+import pytest
+
 SIURANA = {"latitude": 41.2436, "longitude": 0.9186}      # 106 km from Barcelona
 MONTSERRAT = {"latitude": 41.6047, "longitude": 1.8302}   # ~37 km from Barcelona
 
@@ -73,7 +75,32 @@ def test_member_can_join_without_preferences(client):
     member = _add_member(client, code, "Lia")
 
     assert member["grade_min"] is None
+    assert member["max_approach_minutes"] is None
     assert member["styles"] == []
+
+
+def test_member_max_approach_round_trips(client):
+    code = _create_group(client)
+    member = _add_member(client, code, "Ana", max_approach_minutes=20)
+
+    members = client.get(f"/groups/{code}").json()["members"]
+    assert members[0]["max_approach_minutes"] == 20
+
+    response = client.put(f"/groups/{code}/members/{member['id']}", json={"name": "Ana", "max_approach_minutes": 35})
+    assert response.status_code == 200
+
+    members = client.get(f"/groups/{code}").json()["members"]
+    assert members[0]["max_approach_minutes"] == 35
+
+
+@pytest.mark.parametrize("value", [0, -5, 181, "abc"])
+def test_invalid_max_approach_is_422(client, value):
+    code = _create_group(client)
+
+    response = client.post(f"/groups/{code}/members", json={"name": "Ana", "max_approach_minutes": value})
+
+    assert response.status_code == 422
+    assert client.get(f"/groups/{code}").json()["members"] == []
 
 
 def test_invalid_preferences_are_422(client):

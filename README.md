@@ -64,7 +64,7 @@ backend/
                          pgvector embedding.
       group.py           Group (name, unique share_code); has many members.
       member.py          Member of a group, with optional preferences
-                         (grade range, max distance, styles; empty = any).
+                         (grade range, max distance, max walk-in minutes, styles; empty = any).
       stay.py            Stay (campsite/hostel/refuge/...), StayType, StaySource.
       __init__.py        Re-exports every model so all tables register on Base.
 
