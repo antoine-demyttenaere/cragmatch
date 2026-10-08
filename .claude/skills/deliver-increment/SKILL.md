@@ -40,6 +40,7 @@ Increment: $increment
    - the tech lead's verdict and the test and lint results;
    - the "Check by hand" steps from the plan, to do before committing;
    - the commit command: `git add` with each file path listed explicitly
-     (never `-A` or `.`), then `git commit -m` with the plan's commit
-     message.
+     (never `-A` or `.`), then `git commit -m "..."` with the plan's commit
+     message, with any double quotes inside it removed.
+
    Then stop. Never commit, stage or push yourself.
