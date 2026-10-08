@@ -21,12 +21,15 @@ class P:
     grade_max: str | None = None
     max_distance_km: float | None = None
     styles: list[str] = field(default_factory=list)
+    # Last, so existing tests that build P positionally keep working.
+    max_approach_minutes: int | None = None
 
 
-def sector(name, grade_min, grade_max, style="sport", lat=41.3874, lon=2.1686):
+def sector(name, grade_min, grade_max, style="sport", lat=41.3874, lon=2.1686, approach=None):
     """A fake Sector. The default coordinates are Barcelona itself (0 km)."""
     return SimpleNamespace(
         name=name, grade_min=grade_min, grade_max=grade_max, style=style,
+        approach_minutes=approach,
         crag=SimpleNamespace(latitude=lat, longitude=lon),
     )
 
@@ -45,6 +48,21 @@ def test_merge_distance_is_the_smallest_limit():
     result = merge_preferences([P("Ana", max_distance_km=150), P("Marc", max_distance_km=90), P("Lia")])
 
     assert result.filters.max_distance_km == 90
+
+
+def test_merge_approach_is_the_smallest_limit():
+    result = merge_preferences([
+        P("Ana", max_approach_minutes=15), P("Ben", max_approach_minutes=30), P("Lia"),
+    ])
+
+    assert result.filters.max_approach_minutes == 15
+
+
+def test_merge_without_approach_limits_means_no_restriction():
+    result = merge_preferences([P("Ana"), P("Ben")])
+
+    assert result.common_ground
+    assert result.filters.max_approach_minutes is None
 
 
 def test_merge_styles_are_the_ones_everyone_accepts():
@@ -155,6 +173,41 @@ def test_score_member_without_preferences_fits_everything():
     [result] = score_sectors([sector("Any", "4", "9a")], [P("Lia")], fit="overlap", origin=BARCELONA)
 
     assert result.fits == ["Lia"]
+
+
+def test_score_approach_too_long_is_a_misfit():
+    [result] = score_sectors(
+        [sector("Congost", "6a", "7a", approach=30)], [P("Ana", max_approach_minutes=15)],
+        fit="overlap", origin=BARCELONA,
+    )
+
+    assert [(m.name, m.reason) for m in result.misfits] == [("Ana", "approach too long (30 min > 15 min)")]
+
+
+def test_score_approach_equal_to_limit_fits():
+    [result] = score_sectors(
+        [sector("Edge", "6a", "7a", approach=15)], [P("Ana", max_approach_minutes=15)],
+        fit="overlap", origin=BARCELONA,
+    )
+
+    assert result.fits == ["Ana"]
+
+
+def test_score_unknown_approach_fits_everyone():
+    [result] = score_sectors(
+        [sector("El Pati", "6a", "7a", approach=None)], [P("Ana", max_approach_minutes=5)],
+        fit="overlap", origin=BARCELONA,
+    )
+
+    assert result.fits == ["Ana"]
+
+
+def test_score_member_without_approach_limit_fits_long_approach():
+    [result] = score_sectors(
+        [sector("Agulles", "6a", "7a", approach=45)], [P("Ana")], fit="overlap", origin=BARCELONA,
+    )
+
+    assert result.fits == ["Ana"]
 
 
 def test_score_overlap_vs_cover_fit_modes():

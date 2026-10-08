@@ -8,7 +8,8 @@ Two ways to combine a group's preferences:
 - merge_preferences(): STRICT. One set of filters every member accepts
   (the intersection), or a clear "no common ground" result.
 - score_sectors(): SCORED. Every sector gets a fit count and, for each
-  member it doesn't fit, a short reason ("too easy", "too far (...)").
+  member it doesn't fit, a short reason ("too easy", "too far (...)",
+  "approach too long (...)").
 """
 
 from dataclasses import dataclass, field
@@ -29,6 +30,7 @@ class Preferences(Protocol):
     grade_min: str | None
     grade_max: str | None
     max_distance_km: float | None
+    max_approach_minutes: int | None
     styles: list[str]
 
 
@@ -40,6 +42,7 @@ class SearchFilters:
     grade_min: str
     grade_max: str
     max_distance_km: float | None  # None = no distance limit
+    max_approach_minutes: int | None  # None = no limit
     styles: list[str] | None       # None = any style
 
 
@@ -79,6 +82,10 @@ def merge_preferences(members: Sequence[Preferences]) -> MergeResult:
     limits = [m.max_distance_km for m in members if m.max_distance_km is not None]
     max_distance_km = min(limits) if limits else None
 
+    # Approach time: the strictest limit anyone set. Never a conflict.
+    approach_limits = [m.max_approach_minutes for m in members if m.max_approach_minutes is not None]
+    max_approach_minutes = min(approach_limits) if approach_limits else None
+
     # Styles: the ones every member with a style preference accepts.
     # An empty list means "anything", so those members are skipped.
     picky = [m for m in members if m.styles]
@@ -93,7 +100,12 @@ def merge_preferences(members: Sequence[Preferences]) -> MergeResult:
 
     if conflicts:
         return MergeResult(filters=None, conflicts=conflicts)
-    return MergeResult(filters=SearchFilters(grade_min, grade_max, max_distance_km, styles))
+    return MergeResult(
+        filters=SearchFilters(
+            grade_min=grade_min, grade_max=grade_max, max_distance_km=max_distance_km,
+            max_approach_minutes=max_approach_minutes, styles=styles,
+        )
+    )
 
 
 # --- Scored mode ----------------------------------------------------------
@@ -142,6 +154,16 @@ def why_not(sector, distance_km: float, member: Preferences, fit: FitMode) -> st
 
     if member.max_distance_km is not None and distance_km > member.max_distance_km:
         reasons.append(f"too far ({distance_km:.0f} km > {member.max_distance_km:.0f} km)")
+
+    # An unknown approach (None) adds no reason: missing data must not hide a sector.
+    if (
+        member.max_approach_minutes is not None
+        and sector.approach_minutes is not None
+        and sector.approach_minutes > member.max_approach_minutes
+    ):
+        reasons.append(
+            f"approach too long ({sector.approach_minutes} min > {member.max_approach_minutes} min)"
+        )
 
     style = _style_value(sector.style)
     if member.styles and style not in member.styles:
