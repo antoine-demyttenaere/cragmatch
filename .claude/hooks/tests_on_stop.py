@@ -30,7 +30,7 @@ def main() -> int:
     sys.stderr.reconfigure(encoding="utf-8")
     call = json.loads(sys.stdin.buffer.read().decode("utf-8"))
 
-    if not MARKER.exists():
+    if not MARKER.exists() and not developer_finished:
         return 0  # Claude didn't touch backend Python: nothing to test
 
     if not database_is_up():
@@ -50,13 +50,13 @@ def main() -> int:
         encoding="utf-8", errors="replace", timeout=240,
     )
     if result.returncode == 0:
-        MARKER.unlink()
+        MARKER.unlink(missing_ok=True)
         return 0
 
-    attempts = int(MARKER.read_text() or 0) + 1
+    attempts = (int(MARKER.read_text() or 0) if MARKER.exists() else 0) + 1
     tail = "\n".join(result.stdout.splitlines()[-60:])
     if attempts >= MAX_ATTEMPTS:
-        MARKER.unlink()
+        MARKER.unlink(missing_ok=True)
         print(
             f"Tests still fail after {attempts} attempts. Stop changing code and report the "
             f"failure below to the user, with what you tried:\n{tail}",
