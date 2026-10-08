@@ -2,7 +2,7 @@
 
 **Status:** Ready
 **Size:** S
-**Mode:** guide, no code. The sketch is written into this ticket (see "Sketch" below).
+**Mode:** delivery, no code: the deliverable is the sketch written into this ticket (see "Sketch" below).
 **Raw request:** "Before code: sketch the actual steps a trip-planning agent needs: merge group prefs → search sectors → pick one → find stays → maybe ask the user something → propose a plan. Notice this isn't a straight line: there's a decision point and a place a human needs to weigh in."
 
 ## User story

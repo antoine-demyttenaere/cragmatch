@@ -2,7 +2,7 @@
 
 **Status:** Ready
 **Size:** M
-**Mode:** guide. The user writes the code (see CLAUDE.local.md). This is a step brief, not for `/deliver-increment`.
+**Mode:** delivery. Built with `/deliver-increment` from a resolution plan: the developer agent writes the code and tests, the tech lead reviews, the user commits.
 **Raw request:** "Add exactly one node: 'merge group preferences' (reusing your Stage 4 function). Run the graph with just that one node and inspect the resulting state. Add the 'search sectors' node next. Repeat for 'find stays' (Stage 5). At each addition, run the graph and print the state before moving to the next node. Resist wiring everything at once."
 
 ## User story

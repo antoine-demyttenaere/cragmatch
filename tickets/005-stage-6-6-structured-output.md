@@ -2,7 +2,7 @@
 
 **Status:** Ready
 **Size:** M
-**Mode:** guide. The user writes the code (see CLAUDE.local.md). This is a step brief, not for `/deliver-increment`.
+**Mode:** delivery. Built with `/deliver-increment` from a resolution plan: the developer agent writes the code and tests, the tech lead reviews, the user commits.
 **Raw request:** "Redo the query-parsing part of Stage 3 (grade, distance, style extraction) using LangChain's structured output support instead of your raw Pydantic-validation loop. Compare side by side with your Stage 3 code: same idea, different amount of boilerplate."
 
 ## User story

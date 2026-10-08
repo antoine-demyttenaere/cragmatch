@@ -2,7 +2,7 @@
 
 **Status:** Ready
 **Size:** M
-**Mode:** guide. The user writes the code (see CLAUDE.local.md). This is a step brief, not for `/deliver-increment`.
+**Mode:** delivery. Built with `/deliver-increment` from a resolution plan: the developer agent writes the code and tests, the tech lead reviews, the user commits.
 **Raw request:** "Add an interrupt before the 'propose a plan' node, so the graph pauses and waits for the group to approve the chosen sector before it looks up stays and finalizes anything. Run it, see the pause happen, resume it manually, and have Claude Code explain what LangGraph is actually doing during that pause (this is usually the most confusing part, worth real time)."
 
 ## User story

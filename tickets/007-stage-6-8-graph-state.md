@@ -2,7 +2,7 @@
 
 **Status:** Ready
 **Size:** S
-**Mode:** guide. The user writes the code (see CLAUDE.local.md). This is a step brief, not for `/deliver-increment`.
+**Mode:** delivery. Built with `/deliver-increment` from a resolution plan: the developer agent writes the code and tests, the tech lead reviews, the user commits.
 **Raw request:** "Define the graph's state object first, before any nodes: what data flows through the whole process (group prefs, candidate sectors, chosen sector, candidate stays, final plan). Have Claude Code explain what 'state' means in LangGraph and why it's shared, before you write a single node."
 
 ## User story
