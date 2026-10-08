@@ -22,5 +22,6 @@ class Member(Base):
     grade_min: Mapped[str | None] = mapped_column(String(10))
     grade_max: Mapped[str | None] = mapped_column(String(10))
     max_distance_km: Mapped[float | None]  # DOUBLE PRECISION, like Crag's lat/lon
+    max_approach_minutes: Mapped[int | None]  # longest one-way walk-in; NULL = no limit
 
     styles: Mapped[list[str]] = mapped_column(ARRAY(String(20)), default=list)
