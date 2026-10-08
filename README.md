@@ -101,9 +101,11 @@ backend/
 
     rag/                 Stage 6 LangChain code.
       loader.py          SectorLoader: sectors as LangChain Documents.
-      vectorstore.py     Voyage embeddings + PGVector store, collection "sectors".
+      vectorstore.py     Voyage embeddings + PGVector store, collection "sectors"
+                         (built once per process, cosine distance).
       llm.py             get_chat_model(): ChatAnthropic with the Stage 3 settings.
       chain.py           RAG prompt, format_docs(), build_rag_chain().
+      reasons.py         Per-sector match reasons: prompt, MatchReasons, build_reasons_chain(), get_reasons_chain().
 
     scripts/             Run by hand, not part of the API.
       index_sectors_langchain.py  Index sectors into the LangChain PGVector store.

@@ -1,12 +1,21 @@
-"""RAG chain tests. No network: retriever and model are RunnableLambda fakes."""
+"""app/rag chain tests. No network: retriever and model are RunnableLambda fakes."""
 
+import pytest
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 
 from app.core.config import settings
+from app.rag import reasons
 from app.rag.chain import build_rag_chain, format_docs
 from app.rag.llm import get_chat_model
+from app.rag.reasons import (
+    MatchReason,
+    MatchReasons,
+    build_reasons_chain,
+    format_sectors,
+    get_reasons_chain,
+)
 from app.scripts import rag_playground
 from app.services.llm import LLM_MODEL
 
@@ -98,3 +107,67 @@ def test_step_6_5_prints_each_stage_and_calls_retriever_twice(monkeypatch, capsy
     assert "AIMessage" in output and "input_tokens" in output
     assert "after StrOutputParser ===\nTry Poble." in output
     assert "the composed chain, same query ===\nTry Poble." in output
+
+
+class FakeStructuredModel:
+    """Stands in for ChatAnthropic: records with_structured_output and the prompt."""
+
+    def __init__(self) -> None:
+        self.schema = None
+        self.kwargs: dict = {}
+        self.prompts: list = []
+
+    def with_structured_output(self, schema, **kwargs):
+        self.schema = schema
+        self.kwargs = kwargs
+
+        def respond(prompt_value):
+            self.prompts.append(prompt_value)
+            return MatchReasons(reasons=[MatchReason(sector_id=1, reason="Short approach.")])
+
+        return RunnableLambda(respond)
+
+
+@pytest.fixture
+def clean_reasons_cache():
+    # A fake must never stay cached for later tests.
+    get_reasons_chain.cache_clear()
+    yield
+    get_reasons_chain.cache_clear()
+
+
+def test_format_sectors_prefixes_each_doc_with_its_sector_id():
+    docs = [
+        Document(page_content="first text", metadata={"sector_id": 1}),
+        Document(page_content="second text", metadata={"sector_id": 2}),
+    ]
+
+    assert format_sectors(docs) == "id=1 | first text\nid=2 | second text"
+
+
+def test_reasons_chain_fills_prompt_and_asks_for_json_schema():
+    fake = FakeStructuredModel()
+
+    answer = build_reasons_chain(fake).invoke(
+        {"query": "short approach", "sectors": "id=1 | first text"}
+    )
+
+    assert answer == MatchReasons(reasons=[MatchReason(sector_id=1, reason="Short approach.")])
+    assert fake.schema is MatchReasons
+    assert fake.kwargs["method"] == "json_schema"
+    system, human = fake.prompts[0].to_messages()
+    assert "Use ONLY the details given" in system.content
+    assert human.content == "Search: short approach\n\nSectors:\nid=1 | first text"
+
+
+def test_get_reasons_chain_is_built_once(monkeypatch, clean_reasons_cache):
+    builds = []
+
+    def fake_factory():
+        builds.append(1)
+        return FakeStructuredModel()
+
+    monkeypatch.setattr(reasons, "get_chat_model", fake_factory)
+
+    assert get_reasons_chain() is get_reasons_chain()
+    assert len(builds) == 1
