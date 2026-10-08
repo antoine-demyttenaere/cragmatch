@@ -25,11 +25,11 @@ def _add_member(client, code, name, **prefs) -> dict:
     return response.json()
 
 
-def _add_sector(client, name, grade_min, grade_max, style="sport", coords=MONTSERRAT):
+def _add_sector(client, name, grade_min, grade_max, style="sport", coords=MONTSERRAT, approach=None):
     crag = client.post("/crags/", json={"name": f"Crag of {name}", "region": "R", **coords}).json()
     client.post("/sectors/", json={
         "name": name, "style": style, "grade_min": grade_min, "grade_max": grade_max,
-        "crag_id": crag["id"],
+        "crag_id": crag["id"], "approach_minutes": approach,
     })
 
 
@@ -208,8 +208,54 @@ def test_strict_returns_only_sectors_for_everyone(client):
     body = client.get(f"/groups/{code}/search", params={"mode": "strict"}).json()
 
     assert [r["sector"]["name"] for r in body["results"]] == ["Mid Near"]
-    assert body["filters"] == {"grade_min": "6b", "grade_max": "7a", "max_distance_km": None, "styles": ["sport"]}
+    assert body["filters"] == {
+        "grade_min": "6b", "grade_max": "7a", "max_distance_km": None,
+        "max_approach_minutes": None, "styles": ["sport"],
+    }
     assert body["results"][0]["fits"] == ["Ana", "Marc"]
+
+
+def test_strict_respects_shortest_approach_limit(client):
+    _add_sector(client, "Short", "6a", "7a", approach=10)
+    _add_sector(client, "Long", "6a", "7a", approach=30)
+    _add_sector(client, "Unknown", "6a", "7a", approach=None)
+    code = _create_group(client)
+    _add_member(client, code, "Ana", max_approach_minutes=15)
+    _add_member(client, code, "Ben", max_approach_minutes=30)
+
+    body = client.get(f"/groups/{code}/search", params={"mode": "strict"}).json()
+
+    assert sorted(r["sector"]["name"] for r in body["results"]) == ["Short", "Unknown"]
+    assert body["filters"]["max_approach_minutes"] == 15
+
+
+def test_scored_explains_approach_too_long(client):
+    _add_sector(client, "Long", "6a", "7a", approach=30)
+    code = _create_group(client)
+    _add_member(client, code, "Ana", max_approach_minutes=15)
+    _add_member(client, code, "Ben", max_approach_minutes=30)
+
+    [result] = client.get(f"/groups/{code}/search", params={"mode": "scored"}).json()["results"]
+
+    assert (result["fit_count"], result["member_count"]) == (1, 2)
+    [misfit] = result["misfits"]
+    assert misfit["name"] == "Ana"
+    assert misfit["reason"].startswith("approach too long")
+
+
+def test_strict_every_sector_has_too_long_an_approach(client):
+    _add_sector(client, "Long", "6a", "7a", approach=30)
+    _add_sector(client, "Longer", "6a", "7a", approach=45)
+    code = _create_group(client)
+    _add_member(client, code, "Ana", max_approach_minutes=15)
+
+    response = client.get(f"/groups/{code}/search", params={"mode": "strict"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["common_ground"] is True
+    assert body["results"] == []
+    assert body["message"] == "The group agrees on filters, but no sector matches them."
 
 
 def test_strict_no_common_ground(client):

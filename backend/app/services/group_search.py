@@ -66,7 +66,8 @@ def search_for_group(
             candidates = [s for s in candidates if s.style.value in f.styles]
 
         # Scoring the candidates gives strict results the same shape as scored
-        # ones. With fit="overlap" every candidate fits everyone already; with
+        # ones. The approach limit is enforced here, through why_not().
+        # With fit="overlap" every candidate fits everyone already; with
         # fit="cover" this also drops sectors that only partly cover someone.
         scored = [r for r in score_sectors(candidates, members, fit, BARCELONA) if r.fit_count == len(members)]
         return GroupSearchResponse(
@@ -75,7 +76,8 @@ def search_for_group(
             message=None if scored else "The group agrees on filters, but no sector matches them.",
             filters=MergedFilters(
                 grade_min=f.grade_min, grade_max=f.grade_max,
-                max_distance_km=f.max_distance_km, styles=f.styles,
+                max_distance_km=f.max_distance_km, max_approach_minutes=f.max_approach_minutes,
+                styles=f.styles,
             ),
             results=[_to_match(r, len(members)) for r in scored],
         )

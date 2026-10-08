@@ -67,6 +67,7 @@ class MergedFilters(BaseModel):
     grade_min: str
     grade_max: str
     max_distance_km: float | None = Field(description="None = no distance limit.")
+    max_approach_minutes: int | None = Field(description="None = no approach limit.")
     styles: list[str] | None = Field(description="None = any style.")
 
 
