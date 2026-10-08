@@ -99,7 +99,15 @@ backend/
       overpass.py        OpenStreetMap: query, fetch (timeout, retries,
                          fallback server, cache), parse, duplicate detection.
 
+    rag/                 Stage 6 LangChain code.
+      loader.py          SectorLoader: sectors as LangChain Documents.
+      vectorstore.py     Voyage embeddings + PGVector store, collection "sectors".
+      llm.py             get_chat_model(): ChatAnthropic with the Stage 3 settings.
+      chain.py           RAG prompt, format_docs(), build_rag_chain().
+
     scripts/             Run by hand, not part of the API.
+      index_sectors_langchain.py  Index sectors into the LangChain PGVector store.
+      rag_playground.py  Stage 6 steps, one function per step.
       seed.py            Sample Catalan crags/sectors.
       embed_sectors.py   Approach notes + a Voyage embedding per sector.
       seed_stays.py      Small hand-picked list of stays (illustrative).

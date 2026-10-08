@@ -3,6 +3,7 @@
 Run a single step:
     uv run python -m app.scripts.rag_playground 6.2
     uv run python -m app.scripts.rag_playground 6.4
+    uv run python -m app.scripts.rag_playground 6.5
 
 Steps that call Voyage say how many requests they make: the free tier
 allows 3 per minute.
@@ -10,10 +11,13 @@ allows 3 per minute.
 
 import sys
 
+from langchain_core.output_parsers import StrOutputParser
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from app.core.database import SessionLocal
 from app.models import Sector
+from app.rag.chain import RAG_PROMPT, build_rag_chain, format_docs
+from app.rag.llm import get_chat_model
 from app.rag.loader import SectorLoader
 from app.rag.vectorstore import get_embeddings, get_vector_store
 
@@ -97,7 +101,40 @@ def step_6_4():
         print(f"  {doc.metadata['name']}")
 
 
-STEPS = {"6.2": step_6_2, "6.3": step_6_3, "6.4": step_6_4}
+def step_6_5(query: str = "quiet crag with a short approach, good for a beginner", k: int = 3):
+    """The RAG chain piece by piece, then composed. 2 Voyage calls, 2 Claude calls."""
+    retriever = get_vector_store().as_retriever(search_kwargs={"k": k})
+    llm = get_chat_model()
+
+    docs = retriever.invoke(query)   # Voyage call 1
+    print(f"\n=== Step 6.5a: retriever returns {len(docs)} documents ===")
+    for doc in docs:
+        print(f"  {doc.metadata['name']} ({doc.metadata['crag']})")
+        print(f"    {doc.page_content!r}")
+
+    context = format_docs(docs)
+    prompt_value = RAG_PROMPT.invoke({"context": context, "question": query})
+    print("\n=== Step 6.5b: the filled prompt, as Claude receives it ===")
+    for message in prompt_value.to_messages():
+        print(f"[{message.type}]\n{message.content}\n")
+
+    message = llm.invoke(prompt_value)   # Claude call 1
+    print("=== Step 6.5c: the model's reply ===")
+    print(type(message).__name__)
+    print(message.content)
+    print("usage_metadata:", message.usage_metadata)
+    print("stop_reason:", message.response_metadata.get("stop_reason"))
+
+    answer = StrOutputParser().invoke(message)
+    print("\n=== Step 6.5d: after StrOutputParser ===")
+    print(answer)
+
+    chain_answer = build_rag_chain(retriever, llm).invoke(query)   # Voyage call 2, Claude call 2
+    print("\n=== Step 6.5e: the composed chain, same query ===")
+    print(chain_answer)
+
+
+STEPS = {"6.2": step_6_2, "6.3": step_6_3, "6.4": step_6_4, "6.5": step_6_5}
 
 
 if __name__ == "__main__":
