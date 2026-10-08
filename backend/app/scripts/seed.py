@@ -8,8 +8,8 @@ CRAGS = [
         "latitude": 41.2436,
         "longitude": 0.9186,
         "sectors": [
-            {"name": "Can Marges", "style": ClimbingStyle.SPORT, "grade_min": "6a", "grade_max": "8a"},
-            {"name": "Siuranella", "style": ClimbingStyle.SPORT, "grade_min": "6a", "grade_max": "8c"},
+            {"name": "Can Marges", "style": ClimbingStyle.SPORT, "grade_min": "6a", "grade_max": "8a", "approach_minutes": 5},
+            {"name": "Siuranella", "style": ClimbingStyle.SPORT, "grade_min": "6a", "grade_max": "8c", "approach_minutes": 15},
             {"name": "El Pati", "style": ClimbingStyle.SPORT, "grade_min": "7a", "grade_max": "9a+"},  # home of La Rambla
         ],
     },
@@ -19,9 +19,9 @@ CRAGS = [
         "latitude": 41.1650,
         "longitude": 0.7820,
         "sectors": [
-            {"name": "Camp de Tir", "style": ClimbingStyle.SPORT, "grade_min": "6a", "grade_max": "8b"},
-            {"name": "Regall", "style": ClimbingStyle.SPORT, "grade_min": "6b", "grade_max": "8c+"},
-            {"name": "Poble", "style": ClimbingStyle.SPORT, "grade_min": "5+", "grade_max": "7b"},
+            {"name": "Camp de Tir", "style": ClimbingStyle.SPORT, "grade_min": "6a", "grade_max": "8b", "approach_minutes": 2},
+            {"name": "Regall", "style": ClimbingStyle.SPORT, "grade_min": "6b", "grade_max": "8c+", "approach_minutes": 20},
+            {"name": "Poble", "style": ClimbingStyle.SPORT, "grade_min": "5+", "grade_max": "7b", "approach_minutes": 5},
         ],
     },
     {
@@ -30,8 +30,8 @@ CRAGS = [
         "latitude": 41.6047,
         "longitude": 1.8302,
         "sectors": [
-            {"name": "Agulles", "style": ClimbingStyle.TRAD, "grade_min": "4", "grade_max": "7a"},
-            {"name": "Collbató", "style": ClimbingStyle.SPORT, "grade_min": "5", "grade_max": "7c+"},
+            {"name": "Agulles", "style": ClimbingStyle.TRAD, "grade_min": "4", "grade_max": "7a", "approach_minutes": 45},
+            {"name": "Collbató", "style": ClimbingStyle.SPORT, "grade_min": "5", "grade_max": "7c+", "approach_minutes": 10},
         ],
     },
     {
@@ -40,9 +40,9 @@ CRAGS = [
         "latitude": 42.0170,
         "longitude": 0.8660,
         "sectors": [
-            {"name": "Roca Regina", "style": ClimbingStyle.SPORT, "grade_min": "6b", "grade_max": "8b+"},
-            {"name": "Paretot", "style": ClimbingStyle.SPORT, "grade_min": "7a", "grade_max": "8c"},
-            {"name": "Aombra", "style": ClimbingStyle.SPORT, "grade_min": "6a", "grade_max": "7c"},
+            {"name": "Roca Regina", "style": ClimbingStyle.SPORT, "grade_min": "6b", "grade_max": "8b+", "approach_minutes": 10},
+            {"name": "Paretot", "style": ClimbingStyle.SPORT, "grade_min": "7a", "grade_max": "8c", "approach_minutes": 10},
+            {"name": "Aombra", "style": ClimbingStyle.SPORT, "grade_min": "6a", "grade_max": "7c", "approach_minutes": 10},
         ],
     },
     {
@@ -51,8 +51,8 @@ CRAGS = [
         "latitude": 42.0330,
         "longitude": 1.0010,
         "sectors": [
-            {"name": "Congost", "style": ClimbingStyle.SPORT, "grade_min": "6a", "grade_max": "8a"},
-            {"name": "Serrat", "style": ClimbingStyle.SPORT, "grade_min": "5+", "grade_max": "7b+"},
+            {"name": "Congost", "style": ClimbingStyle.SPORT, "grade_min": "6a", "grade_max": "8a", "approach_minutes": 30},
+            {"name": "Serrat", "style": ClimbingStyle.SPORT, "grade_min": "5+", "grade_max": "7b+", "approach_minutes": 10},
         ],
     },
 ]

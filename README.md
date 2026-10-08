@@ -60,7 +60,8 @@ backend/
 
     models/              SQLAlchemy ORM models (database tables).
       crag.py            Crag; one crag has many sectors.
-      sector.py          Sector + ClimbingStyle, approach_notes, pgvector embedding.
+      sector.py          Sector + ClimbingStyle, approach_notes, approach_minutes,
+                         pgvector embedding.
       group.py           Group (name, unique share_code); has many members.
       member.py          Member of a group, with optional preferences
                          (grade range, max distance, styles; empty = any).
@@ -68,7 +69,7 @@ backend/
       __init__.py        Re-exports every model so all tables register on Base.
 
     schemas/             Pydantic request/response shapes, decoupled from models.
-      crag.py, sector.py Crag/Sector create + read shapes.
+      crag.py, sector.py Crag/Sector create + read shapes (Sector has approach_minutes).
       search.py          Natural-language and similarity search shapes.
       group.py           Members (with grade validators), groups, and the
                          group search response (fits / misfits per sector).

@@ -30,4 +30,6 @@ class Sector(Base):
     crag: Mapped["Crag"] = relationship(back_populates="sectors")
 
     approach_notes: Mapped[str | None] = mapped_column(String(500))
+    # One way, car park to the foot of the sector. NULL = unknown.
+    approach_minutes: Mapped[int | None]
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1024))
