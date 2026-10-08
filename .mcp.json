@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "cragmatch-db": {
+      "type": "stdio",
+      "command": "cmd",
+      "args": [
+        "/c", "npx", "-y", "@bytebase/dbhub",
+        "--transport", "stdio",
+        "--dsn", "${CRAGMATCH_MCP_DATABASE_URL}"
+      ]
+    }
+  }
+}
