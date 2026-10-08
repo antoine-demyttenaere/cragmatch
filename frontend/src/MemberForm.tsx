@@ -18,6 +18,7 @@ function MemberForm({ initial, onSubmit, onCancel }: MemberFormProps) {
   const [gradeMin, setGradeMin] = useState(initial?.grade_min ?? "");
   const [gradeMax, setGradeMax] = useState(initial?.grade_max ?? "");
   const [maxDistance, setMaxDistance] = useState(initial?.max_distance_km?.toString() ?? "");
+  const [maxApproach, setMaxApproach] = useState(initial?.max_approach_minutes?.toString() ?? "");
   const [styles, setStyles] = useState<string[]>(initial?.styles ?? []);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -36,11 +37,12 @@ function MemberForm({ initial, onSubmit, onCancel }: MemberFormProps) {
         grade_min: gradeMin || null,
         grade_max: gradeMax || null,
         max_distance_km: maxDistance === "" ? null : Number(maxDistance),
+        max_approach_minutes: maxApproach === "" ? null : Number(maxApproach),
         styles,
       });
       if (!initial) {
         // Clear the form after adding, ready for the next friend.
-        setName(""); setGradeMin(""); setGradeMax(""); setMaxDistance(""); setStyles([]);
+        setName(""); setGradeMin(""); setGradeMax(""); setMaxDistance(""); setMaxApproach(""); setStyles([]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -70,6 +72,11 @@ function MemberForm({ initial, onSubmit, onCancel }: MemberFormProps) {
         Max distance (km):
         <input type="number" min={1} value={maxDistance} placeholder="any"
           onChange={(e) => setMaxDistance(e.target.value)} style={{ width: 70 }} />
+      </label>{" "}
+      <label>
+        Max walk-in (min):
+        <input type="number" min={1} max={180} value={maxApproach} placeholder="any"
+          onChange={(e) => setMaxApproach(e.target.value)} style={{ width: 70 }} />
       </label>
       <div>
         Styles (none ticked = any):{" "}
