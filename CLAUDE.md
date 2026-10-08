@@ -18,7 +18,10 @@ Backend commands run from `backend/`, frontend commands from `frontend/`.
 - `docker compose up -d` (repo root): start the database
 - `uv run fastapi dev app/main.py`: API on :8000, docs at /docs
 - `uv run pytest`: all tests; must stay green before any commit
+- `uv run pytest tests/test_groups_api.py::test_name -x`: one test, stop on first failure
 - `uv run alembic revision --autogenerate -m "..."` then `uv run alembic upgrade head`
+- Fresh DB: seed scripts in README "Running locally" (order matters;
+  `embed_sectors` hits Voyage's 3 req/min limit)
 - `npm run dev`: frontend on :5173
 - `npm run lint`: ESLint, must pass for frontend changes
 
@@ -71,6 +74,9 @@ Backend commands run from `backend/`, frontend commands from `frontend/`.
   TestClient tests (happy path + main error cases).
 
 ## Traps
+- Tests build their schema with `create_all()`, not migrations, so green tests
+  don't mean the dev DB is current. After pulling or delivering a migration, run
+  `uv run alembic upgrade head`. "UndefinedColumn" on the dev server means you skipped it.
 - Rate-limited endpoints (slowapi) must take a parameter named `request: Request`;
   the JSON body is therefore named `body`.
 - Voyage free tier: 3 requests per minute. Scripts that embed must batch or wait.
@@ -86,6 +92,14 @@ Backend commands run from `backend/`, frontend commands from `frontend/`.
 - Never read, print or commit `backend/.env`. Only `.env.example` (blank values)
   is committed.
 - No real API keys, passwords or personal data in code, tests or commits.
+
+## Workflow
+Idea → `/qualify-ticket` (product-owner) → `tickets/NNN-*.md` → `/write-resolution-plan`
+(tech-lead) → `NNN-*.plan.md` → `/deliver-increment` (developer builds one increment,
+tech-lead reviews). Hooks in `.claude/hooks/`: block `.env` access, lint each edited
+file, run backend tests when the developer agent finishes (and before Claude
+stops if it edited backend Python), and keep
+the product-owner and tech-lead writing only in `tickets/`.
 
 ## Definition of done
 1. Tests pass (`uv run pytest`) and lint passes for frontend changes.
