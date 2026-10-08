@@ -1,6 +1,6 @@
 # 004: Stage 6.5b, wire the LangChain RAG path into the fuzzy search endpoint
 
-**Status:** Needs answers
+**Status:** Ready
 **Size:** M
 **Mode:** delivery. Built with `/deliver-increment` from a resolution plan: the developer agent writes the code and tests, the tech lead reviews, the user commits.
 **Raw request:** "Only after that, wire it to the /search/natural fuzzy-matching path from Stage 3, replacing your hand-built version."
@@ -45,11 +45,11 @@ The tests are updated to mock the new seams.
   Stage 6 is finished, so the two can still be compared.
 - Frontend changes: the response shape doesn't change.
 
-## Open questions
-- [blocking] Which endpoint does 6.5 replace? (suggested default: `/search/similar`, the
-  retrieval path. `/search/natural` is covered by 6.6.)
-- [non-blocking] Keep the Stage 3 code next to the new path, behind a switch, or delete
-  it? (suggested default: delete it from the router, since it's in git history.)
+## Decisions
+- **Which endpoint 6.5 replaces:** `/search/similar`, the retrieval path.
+  `/search/natural` stays as it is and is covered by ticket 005 (Stage 6.6).
+- **Stage 3 code:** delete it from the router (it stays in git history), no switch.
+  Keep `sectors.embedding` and `embed_sectors.py` for comparison until Stage 6 ends.
 
 ## Notes for the tech lead
 - The ranking needs scores: `PGVector.similarity_search_with_score` returns
