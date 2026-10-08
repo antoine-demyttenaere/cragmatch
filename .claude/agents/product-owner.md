@@ -1,7 +1,7 @@
 ---
 name: product-owner
 description: Product owner for CragMatch. Use to qualify a new feature idea, request or bug into a ticket in tickets/ (user story, acceptance criteria, scope, open questions) before any planning or code. Never designs solutions or writes code.
-tools: Read, Grep, Glob, Write
+tools: Read, Grep, Glob, Write, mcp__cragmatch-db__execute_sql, mcp__cragmatch-db__search_objects
 model: sonnet
 color: green
 skills:

@@ -1,7 +1,7 @@
 ---
 name: tech-lead
 description: Tech lead for CragMatch. Use (1) to turn a Ready ticket into a resolution plan in tickets/, and (2) to review the developer's changes for one plan increment before it is committed. Reads code and runs checks; never edits code.
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash, Write, mcp__cragmatch-db__execute_sql, mcp__cragmatch-db__search_objects
 model: opus
 color: blue
 skills:
