@@ -8,6 +8,7 @@ export interface Sector {
   grade_max: string;
   crag_id: number;
   approach_notes: string | null;
+  approach_minutes: number | null; // one way; null = unknown
   crag: {
     id: number;
     name: string;
@@ -39,6 +40,7 @@ export interface MemberInput {
   grade_min: string | null;
   grade_max: string | null;
   max_distance_km: number | null;
+  max_approach_minutes: number | null;
   styles: string[]; // empty = any style
 }
 
@@ -71,6 +73,7 @@ export interface GroupSearchResponse {
     grade_min: string;
     grade_max: string;
     max_distance_km: number | null;
+    max_approach_minutes: number | null;
     styles: string[] | null;
   } | null;
   results: GroupSectorMatch[];

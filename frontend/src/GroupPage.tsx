@@ -15,8 +15,9 @@ interface GroupPageProps {
 function describePrefs(m: Member): string {
   const grades = m.grade_min ? `${m.grade_min}–${m.grade_max}` : "any grade";
   const distance = m.max_distance_km ? `≤${m.max_distance_km} km` : "any distance";
+  const walk = m.max_approach_minutes ? `≤${m.max_approach_minutes} min walk` : "any walk-in";
   const styles = m.styles.length ? m.styles.join("/") : "any style";
-  return `${grades}, ${distance}, ${styles}`;
+  return `${grades}, ${distance}, ${walk}, ${styles}`;
 }
 
 function GroupPage({ initialCode, onCodeChange }: GroupPageProps) {
@@ -217,6 +218,7 @@ function GroupPage({ initialCode, onCodeChange }: GroupPageProps) {
             <p>
               Everyone agrees on: {search.filters.grade_min}–{search.filters.grade_max}
               {search.filters.max_distance_km !== null && `, ≤${search.filters.max_distance_km} km`}
+              {search.filters.max_approach_minutes !== null && `, ≤${search.filters.max_approach_minutes} min walk`}
               {search.filters.styles && `, ${search.filters.styles.join("/")}`}
             </p>
           )}
@@ -229,6 +231,7 @@ function GroupPage({ initialCode, onCodeChange }: GroupPageProps) {
               <li key={r.sector.id} style={{ marginBottom: 6 }}>
                 <strong>{r.sector.name}</strong> ({r.sector.crag.name}) — {r.sector.style},{" "}
                 {r.sector.grade_min}–{r.sector.grade_max} — {r.distance_km} km —{" "}
+                {r.sector.approach_minutes !== null ? `${r.sector.approach_minutes} min walk-in` : "approach unknown"} —{" "}
                 fits {r.fit_count} of {r.member_count}{" "}
                 <button type="button" onClick={() => setStaysFor(r.sector)}>Stays nearby</button>
                 <div>
