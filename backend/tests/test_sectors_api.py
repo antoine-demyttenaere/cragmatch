@@ -114,3 +114,26 @@ def test_search_without_distance_params_ignores_distance(client):
     assert response.status_code == 200
     names = [s["name"] for s in response.json()]
     assert "Far Sector" in names
+
+
+def test_create_sector_with_approach_minutes(client):
+    crag_id = _create_crag(client)
+    response = _create_sector(client, crag_id, approach_minutes=20)
+    assert response.status_code == 201
+    assert response.json()["approach_minutes"] == 20
+
+    fetched = client.get(f"/sectors/{response.json()['id']}")
+    assert fetched.json()["approach_minutes"] == 20
+
+
+def test_approach_minutes_defaults_to_unknown(client):
+    crag_id = _create_crag(client)
+    response = _create_sector(client, crag_id)
+    assert response.status_code == 201
+    assert response.json()["approach_minutes"] is None
+
+
+def test_negative_approach_minutes_is_422(client):
+    crag_id = _create_crag(client)
+    response = _create_sector(client, crag_id, approach_minutes=-1)
+    assert response.status_code == 422

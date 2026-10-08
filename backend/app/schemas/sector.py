@@ -18,6 +18,12 @@ class SectorBase(BaseModel):
     )
     crag_id: int = Field(description="ID of the crag this sector belongs to.")
     approach_notes: str | None = Field(default=None, description="Notes about approaching the sector.")
+    approach_minutes: int | None = Field(
+        default=None,
+        ge=0,
+        le=600,
+        description="Walk-in time in minutes, one way, from the car park. None = unknown.",
+    )
    
    
 class SectorCreate(SectorBase):
