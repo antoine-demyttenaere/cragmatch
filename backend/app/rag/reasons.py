@@ -6,7 +6,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 from pydantic import BaseModel, Field
 
-from app.rag.llm import get_chat_model
+from app.rag.llm import UsageLogger, get_chat_model
 
 
 # The shape we ask Claude to return. These live here, not in schemas/,
@@ -47,7 +47,10 @@ def build_reasons_chain(llm: BaseChatModel) -> Runnable:
     # json_schema is the same API feature as Stage 3's output_format; the default
     # forced tool call doesn't work with Sonnet 5's default thinking.
     # Input: {"query": str, "sectors": str}. Output: a MatchReasons instance.
-    return REASONS_PROMPT | llm.with_structured_output(MatchReasons, method="json_schema")
+    # The callback brings back the token log that explain_matches() had. Callbacks
+    # set with with_config reach every step inside the chain, including the model.
+    chain = REASONS_PROMPT | llm.with_structured_output(MatchReasons, method="json_schema")
+    return chain.with_config(callbacks=[UsageLogger("reasons")])
 
 
 @lru_cache(maxsize=1)
