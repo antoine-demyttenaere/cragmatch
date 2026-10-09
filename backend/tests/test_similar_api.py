@@ -1,185 +1,210 @@
 """API tests for POST /search/similar.
 
-The endpoint calls two external services:
-  - Voyage, through embed_query(), to turn the query text into a vector
-  - Claude, through explain_matches(), to write a "why this matches" note
+The endpoint's external calls come through two seams in
+app.services.similar_search:
+  - get_vector_store(): Voyage (query embedding) + the PGVector store
+  - get_reasons_chain(): Claude, which writes a "why this matches" note
 
-Tests must never call either one for real: that would cost money on every
-`pytest` run, make tests slow, and make them fail offline or when a service
-rate-limits us (Voyage's free tier allows 3 requests per minute).
+Tests must never use the real ones: the real store would connect to the dev
+database and Voyage (free tier: 3 requests per minute), and the real chain
+would call Claude and cost money on every `pytest` run.
 
-So we use pytest's `monkeypatch` fixture to swap those two functions for
-fakes while a test runs. `monkeypatch.setattr(module, "name", fake)` replaces
-`module.name` with `fake`, and pytest automatically puts the original back
-when the test finishes, so one test's fake never leaks into another test.
+So an autouse fixture swaps both for fakes with monkeypatch, which puts the
+originals back when the test finishes. It returns the fakes so a test can
+configure them (what the store returns, whether Claude fails, ...).
 """
 
-import pytest
+from types import SimpleNamespace
 
-from app.models import Sector
-from app.routers import search as search_router
+import pytest
+from langchain_core.documents import Document
 
 from app.core.rate_limit import limiter
+from app.rag.reasons import MatchReason, MatchReasons
+from app.services import similar_search
 
-DIM = 1024  # must match Vector(1024) on Sector.embedding
+
+class FakeStore:
+    def __init__(self) -> None:
+        self.scored: list[tuple[Document, float]] = []
+        self.embed_error: Exception | None = None
+        self.search_calls: list[int] = []  # the k of every search
+        self.embeddings = SimpleNamespace(embed_query=self._embed_query)
+
+    def _embed_query(self, text: str) -> list[float]:
+        if self.embed_error is not None:
+            raise self.embed_error
+        return [0.0]
+
+    def similarity_search_with_score_by_vector(self, embedding, k: int):
+        self.search_calls.append(k)
+        return self.scored[:k]
 
 
-# --- Fixtures and helpers -------------------------------------------------
+class FakeChain:
+    def __init__(self) -> None:
+        self.answer = MatchReasons(reasons=[])
+        self.error: Exception | None = None
+        self.calls: list[dict] = []
+
+    def invoke(self, inputs: dict) -> MatchReasons:
+        self.calls.append(inputs)
+        if self.error is not None:
+            raise self.error
+        return self.answer
 
 
 @pytest.fixture(autouse=True)
-def fake_explain(monkeypatch):
-    """Replace Claude with a fake in every test of this file.
-
-    autouse=True means every test here gets this fixture automatically, even
-    though no test lists it as a parameter. That's the safe default: a new
-    test added later can't accidentally call the real Claude API.
-
-    The fake returns the same shape as the real explain_matches(): a dict
-    {sector_id: reason}. A test that needs different behaviour (e.g. Claude
-    failing) simply calls monkeypatch.setattr again; the later patch wins.
-    """
-    def fake_explain_matches(query: str, sectors: list[Sector]) -> dict[int, str]:
-        return {sector.id: f"test reason for {sector.name}" for sector in sectors}
-
-    monkeypatch.setattr(search_router, "explain_matches", fake_explain_matches)
+def store(monkeypatch) -> FakeStore:
+    fake = FakeStore()
+    monkeypatch.setattr(similar_search, "get_vector_store", lambda: fake)
+    return fake
 
 
-def _unit(i: int) -> list[float]:
-    """A vector of zeros with a single 1.0 at position i.
-
-    Two different unit vectors are at 90 degrees to each other (cosine
-    similarity 0), and a vector compared to itself has similarity 1. That
-    makes the expected ranking obvious: whichever sector shares the query's
-    axis comes first.
-    """
-    vec = [0.0] * DIM
-    vec[i] = 1.0
-    return vec
+@pytest.fixture(autouse=True)
+def chain(monkeypatch) -> FakeChain:
+    fake = FakeChain()
+    monkeypatch.setattr(similar_search, "get_reasons_chain", lambda: fake)
+    return fake
 
 
-def _fake_query_vector(monkeypatch, vec: list[float]) -> None:
-    """Make embed_query() return `vec` instead of calling Voyage."""
-    monkeypatch.setattr(search_router, "embed_query", lambda text: vec)
-
-
-def _make_sector(client, db_session, name: str, embedding: list[float] | None) -> int:
-    """Create a crag + sector through the API, then set its embedding.
-
-    The embedding is written directly through db_session because the API
-    deliberately doesn't accept embeddings (they're internal, not part of
-    SectorCreate). db_session is the same session the client uses, via the
-    get_db override in conftest.py, so the endpoint sees this change.
-    """
+def _make_sector(client, name: str) -> int:
     crag = client.post("/crags/", json={"name": "C", "region": "R", "latitude": 41.0, "longitude": 1.0})
     sector = client.post("/sectors/", json={
         "name": name, "style": "sport", "grade_min": "6a", "grade_max": "7a",
         "crag_id": crag.json()["id"],
     })
-    sector_id = sector.json()["id"]
-    db_session.get(Sector, sector_id).embedding = embedding
-    db_session.commit()
-    return sector_id
+    return sector.json()["id"]
 
 
-# --- Ranking (the pgvector part) -----------------------------------------
+def _doc(sector_id: int, name: str) -> Document:
+    return Document(
+        page_content=f"{name} text",
+        metadata={"sector_id": sector_id, "name": name},
+    )
 
 
-def test_similar_ranks_closest_first(client, db_session, monkeypatch):
-    _make_sector(client, db_session, "Along axis 0", _unit(0))
-    _make_sector(client, db_session, "Along axis 1", _unit(1))
-    # The query points along axis 0, so "Along axis 0" must rank first.
-    _fake_query_vector(monkeypatch, _unit(0))
+# --- Ranking and sector loading ------------------------------------------
 
-    response = client.post("/search/similar", json={"query": "anything"})
+
+def test_similar_keeps_the_store_ranking_order(client, store):
+    a_id = _make_sector(client, "A")
+    b_id = _make_sector(client, "B")
+    # B is the closer match even though A has the lower id.
+    store.scored = [(_doc(b_id, "B"), 0.1), (_doc(a_id, "A"), 0.4)]
+
+    response = client.post("/search/similar", json={"query": "x"})
 
     assert response.status_code == 200
     results = response.json()["results"]
-    assert [r["sector"]["name"] for r in results] == ["Along axis 0", "Along axis 1"]
-    assert results[0]["similarity"] > results[1]["similarity"]
-    # The raw 1024-float vector must never leak into the API response.
+    assert [r["sector"]["name"] for r in results] == ["B", "A"]
+    assert results[0]["similarity"] == pytest.approx(0.9)
+    assert results[1]["similarity"] == pytest.approx(0.6)
+    # The raw vector must never leak into the API response.
     assert "embedding" not in results[0]["sector"]
 
 
-def test_similar_skips_sectors_without_embedding(client, db_session, monkeypatch):
-    _make_sector(client, db_session, "Has vector", _unit(0))
-    _make_sector(client, db_session, "No vector", None)
-    _fake_query_vector(monkeypatch, _unit(0))
+def test_similar_skips_documents_whose_sector_is_gone(client, store, chain):
+    a_id = _make_sector(client, "A")
+    store.scored = [(_doc(a_id, "A"), 0.1), (_doc(999999, "Gone"), 0.2)]
 
-    results = client.post("/search/similar", json={"query": "x"}).json()["results"]
+    response = client.post("/search/similar", json={"query": "x"})
 
-    assert [r["sector"]["name"] for r in results] == ["Has vector"]
+    assert response.status_code == 200
+    assert [r["sector"]["name"] for r in response.json()["results"]] == ["A"]
+    assert "id=999999" not in chain.calls[0]["sectors"]
 
 
-def test_similar_respects_limit(client, db_session, monkeypatch):
-    for i in range(3):
-        _make_sector(client, db_session, f"S{i}", _unit(i))
-    _fake_query_vector(monkeypatch, _unit(0))
+def test_similar_passes_limit_to_the_store(client, store):
+    ids = [_make_sector(client, f"S{i}") for i in range(3)]
+    store.scored = [(_doc(sector_id, f"S{i}"), 0.1 * i) for i, sector_id in enumerate(ids)]
 
     response = client.post("/search/similar", json={"query": "x", "limit": 2})
 
+    assert store.search_calls == [2]
     assert len(response.json()["results"]) == 2
 
 
-def test_similar_returns_503_when_embedding_fails(client, monkeypatch):
+def test_similar_returns_503_when_embedding_fails(client, store, chain):
     # Without the query vector there is no search at all, so this must be
-    # an error (503), unlike an explanation failure below.
-    def broken_embed(text):
-        raise RuntimeError("Voyage is down")
-
-    monkeypatch.setattr(search_router, "embed_query", broken_embed)
+    # an error (503), unlike a reasons failure below.
+    store.embed_error = RuntimeError("Voyage is down")
 
     response = client.post("/search/similar", json={"query": "x"})
 
     assert response.status_code == 503
+    assert response.json()["detail"] == "Couldn't reach the embedding service, try again later."
+    assert store.search_calls == []
+    assert chain.calls == []
 
 
-# --- Explanations (the Claude part) --------------------------------------
+def test_similar_with_no_matches_returns_empty_and_skips_claude(client, store, chain):
+    store.scored = []
+
+    response = client.post("/search/similar", json={"query": "x"})
+
+    assert response.status_code == 200
+    assert response.json()["results"] == []
+    assert chain.calls == []
 
 
-def test_similar_attaches_reason_to_each_result(client, db_session, monkeypatch):
-    # Proves the wiring: whatever explain_matches returns for a sector id
-    # ends up in that sector's "reason" field. Uses the autouse fake.
-    _make_sector(client, db_session, "Poble", _unit(0))
-    _make_sector(client, db_session, "Agulles", _unit(1))
-    _fake_query_vector(monkeypatch, _unit(0))
+# --- Reasons (the Claude part) -------------------------------------------
+
+
+def test_similar_attaches_reason_to_each_result(client, store, chain):
+    a_id = _make_sector(client, "A")
+    b_id = _make_sector(client, "B")
+    store.scored = [(_doc(a_id, "A"), 0.1), (_doc(b_id, "B"), 0.2)]
+    chain.answer = MatchReasons(reasons=[
+        MatchReason(sector_id=a_id, reason="reason A"),
+        MatchReason(sector_id=b_id, reason="reason B"),
+    ])
 
     results = client.post("/search/similar", json={"query": "x"}).json()["results"]
 
-    assert {r["sector"]["name"]: r["reason"] for r in results} == {
-        "Poble": "test reason for Poble",
-        "Agulles": "test reason for Agulles",
-    }
+    assert {r["sector"]["name"]: r["reason"] for r in results} == {"A": "reason A", "B": "reason B"}
+    assert chain.calls[0]["query"] == "x"
+    assert f"id={a_id} | A text" in chain.calls[0]["sectors"]
+    assert f"id={b_id} | B text" in chain.calls[0]["sectors"]
 
 
-def test_similar_reason_is_none_for_sector_claude_skipped(client, db_session, monkeypatch):
-    # Claude might leave a sector out of its answer. The endpoint uses
+def test_similar_reason_is_none_for_sector_claude_skipped(client, store, chain):
+    # Claude might leave a sector out of its answer. The service uses
     # reasons.get(sector.id), so that sector gets reason=None instead of a
     # KeyError that would turn the whole response into a 500.
-    kept_id = _make_sector(client, db_session, "Explained", _unit(0))
-    _make_sector(client, db_session, "Skipped", _unit(1))
-    _fake_query_vector(monkeypatch, _unit(0))
-    monkeypatch.setattr(
-        search_router, "explain_matches",
-        lambda query, sectors: {kept_id: "only this one"},
-    )
+    a_id = _make_sector(client, "A")
+    b_id = _make_sector(client, "B")
+    store.scored = [(_doc(a_id, "A"), 0.1), (_doc(b_id, "B"), 0.2)]
+    chain.answer = MatchReasons(reasons=[MatchReason(sector_id=a_id, reason="only this one")])
 
     results = client.post("/search/similar", json={"query": "x"}).json()["results"]
 
-    reasons = {r["sector"]["name"]: r["reason"] for r in results}
-    assert reasons == {"Explained": "only this one", "Skipped": None}
+    assert {r["sector"]["name"]: r["reason"] for r in results} == {"A": "only this one", "B": None}
 
 
-def test_similar_still_returns_results_when_explain_fails(client, db_session, monkeypatch):
+def test_similar_still_returns_results_when_reasons_chain_fails(client, store, chain):
     # The search already succeeded, so a Claude failure must not break the
     # response: same results, just reason=None everywhere.
-    _make_sector(client, db_session, "Has vector", _unit(0))
-    _fake_query_vector(monkeypatch, _unit(0))
+    a_id = _make_sector(client, "A")
+    store.scored = [(_doc(a_id, "A"), 0.1)]
+    chain.error = RuntimeError("Claude is down")
 
-    def broken_explain(query: str, sectors: list[Sector]) -> dict[int, str]:
-        raise RuntimeError("Claude is down")
+    response = client.post("/search/similar", json={"query": "x"})
 
-    monkeypatch.setattr(search_router, "explain_matches", broken_explain)
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert len(results) == 1
+    assert results[0]["reason"] is None
+
+
+def test_similar_still_returns_results_when_reasons_chain_cannot_be_built(client, store, monkeypatch):
+    a_id = _make_sector(client, "A")
+    store.scored = [(_doc(a_id, "A"), 0.1)]
+
+    def broken_build():
+        raise RuntimeError("missing API key")
+
+    monkeypatch.setattr(similar_search, "get_reasons_chain", broken_build)
 
     response = client.post("/search/similar", json={"query": "x"})
 
@@ -194,7 +219,6 @@ def test_similar_still_returns_results_when_explain_fails(client, db_session, mo
 def test_similar_is_rate_limited(client, monkeypatch):
     monkeypatch.setattr(limiter, "enabled", True)   # restored automatically after the test
     limiter.reset()                                  # start from a clean count
-    _fake_query_vector(monkeypatch, _unit(0))
 
     # Collect every status code first, then compare the whole list: if this
     # ever fails, pytest shows both lists side by side, so you see exactly
