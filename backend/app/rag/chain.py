@@ -3,7 +3,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable, RunnablePassthrough
 
-# Same grounding rule as EXPLAIN_PROMPT in services/explain.py: only the
+# Same grounding rule as REASONS_PROMPT in rag/reasons.py: only the
 # retrieved text, no facts from the model's own knowledge.
 RAG_PROMPT = ChatPromptTemplate.from_messages(
     [

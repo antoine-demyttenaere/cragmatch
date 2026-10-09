@@ -1,23 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from app.core.rate_limit import limiter
 from app.core.dependencies import get_db
-from app.models import ClimbingStyle, Sector
+from app.models import ClimbingStyle
 from app.schemas.search import (
     NaturalSearchRequest,
     NaturalSearchResponse,
     ParsedFilters,
-    SimilarMatch,
     SimilarSearchRequest,
     SimilarSearchResponse,
 )
-from app.services.embedding import embed_query
 from app.services.geo import BARCELONA
 from app.services.search import find_matching_sectors
+from app.services.similar_search import EmbeddingUnavailableError, find_similar_sectors
 
 from app.services.llm import LLM_MODEL, client, log_usage
-from app.services.explain import explain_matches
 
 import logging
 logger = logging.getLogger(__name__)
@@ -114,44 +112,18 @@ def search_natural(request: Request, body: NaturalSearchRequest, db: Session = D
     summary="Find sectors similar to a free-text description",
     description=(
         "Embeds the query with Voyage and ranks sectors by cosine "
-        "similarity to their stored embeddings. For fuzzy asks that don't "
+        "similarity in the LangChain PGVector store, then a LangChain chain "
+        "asks Claude for a reason per sector. For fuzzy asks that don't "
         "map to hard filters, e.g. 'quiet crag, short approach'."
     ),
 )
 @limiter.limit("10/minute")
 def search_similar(request: Request, body: SimilarSearchRequest, db: Session = Depends(get_db)):
     try:
-        query_vec = embed_query(body.query)
-    except Exception:
+        return find_similar_sectors(db, body.query, body.limit)
+    except EmbeddingUnavailableError:
         logger.exception("Failed to embed query")
         raise HTTPException(
             status_code=503,
             detail="Couldn't reach the embedding service, try again later.",
         )
-
-    # pgvector's `<=>` operator: Postgres computes and sorts by the distance.
-    distance = Sector.embedding.cosine_distance(query_vec)
-
-    rows = (
-        db.query(Sector, distance.label("distance"))
-        .options(joinedload(Sector.crag))
-        .filter(Sector.embedding.is_not(None))
-        .order_by(distance)
-        .limit(body.limit)
-        .all()
-    )
-
-    sectors = [sector for sector, _ in rows]
-
-    try:
-        reasons = explain_matches(body.query, sectors)
-    except Exception:
-        logger.exception("explain_matches failed; returning results without reasons")
-        reasons = {}
-
-    return SimilarSearchResponse(
-        results=[
-            SimilarMatch(sector=sector, similarity=1 - dist, reason=reasons.get(sector.id))
-            for sector, dist in rows
-        ]
-    )

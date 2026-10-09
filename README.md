@@ -22,6 +22,8 @@ First time only, fill the database with sample data:
 ```
 uv run python -m app.scripts.seed             # crags + sectors
 uv run python -m app.scripts.embed_sectors    # approach notes + Voyage embeddings
+uv run python -m app.scripts.index_sectors_langchain   # LangChain PGVector index, used by /search/similar
+                                                       # (needs the approach notes from embed_sectors; 1 Voyage request)
 uv run python -m app.scripts.seed_stays       # hand-picked stays (run before the import)
 uv run python -m app.scripts.import_stays     # campsites/hostels/huts from OpenStreetMap
 ```
@@ -78,7 +80,7 @@ backend/
     routers/             HTTP endpoints only; logic lives in services/.
       crags.py           /crags: list, get, create.
       sectors.py         /sectors: CRUD, /sectors/search, /sectors/{id}/stays.
-      search.py          /search/natural (Claude) and /search/similar (pgvector),
+      search.py          /search/natural (Claude) and /search/similar (LangChain PGVector + reasons chain),
                          both rate-limited.
       groups.py          /groups: create, read, add/replace/remove members,
                          /groups/{code}/search, and group-aware stays.
@@ -88,7 +90,7 @@ backend/
       geo.py             haversine_km() and the BARCELONA origin.
       search.py          find_matching_sectors(): the Stage 1 filter logic.
       llm.py             Anthropic client (timeout/retries) + token usage logging.
-      explain.py         Claude "why this matches" notes for similarity results.
+      similar_search.py  /search/similar logic: PGVector scores, sectors in rank order, reasons chain.
       embedding.py       Voyage client + embed_query().
       groups.py          generate_share_code() (secrets, readable alphabet).
       group_matching.py  PURE (no DB): merge_preferences() for strict mode,
