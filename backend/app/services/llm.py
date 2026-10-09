@@ -13,11 +13,12 @@ client = anthropic.Anthropic(
 LLM_MODEL = "claude-sonnet-5"
 
 
+def log_tokens(purpose: str, input_tokens: int, output_tokens: int) -> None:
+    logger.info("Claude %s: %d in / %d out tokens", purpose, input_tokens, output_tokens)
+
+
 def log_usage(purpose: str, response) -> None:
-    logger.info(
-        "Claude %s: %d in / %d out tokens",
-        purpose,
-        response.usage.input_tokens,
-        response.usage.output_tokens,
-    )
+    # One log format for the SDK path and the LangChain path (rag/llm.py),
+    # so the log lines look the same.
+    log_tokens(purpose, response.usage.input_tokens, response.usage.output_tokens)
 

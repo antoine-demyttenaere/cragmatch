@@ -1,8 +1,12 @@
 """app/rag chain tests. No network: retriever and model are RunnableLambda fakes."""
 
+import logging
+
 import pytest
 from langchain_core.documents import Document
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
+from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.runnables import RunnableLambda
 
 from app.core.config import settings
@@ -158,6 +162,33 @@ def test_reasons_chain_fills_prompt_and_asks_for_json_schema():
     system, human = fake.prompts[0].to_messages()
     assert "Use ONLY the details given" in system.content
     assert human.content == "Search: short approach\n\nSectors:\nid=1 | first text"
+
+
+class FakeJsonModel:
+    """A real chat model (so it fires on_llm_end) that answers with fixed JSON.
+
+    The RunnableLambda fakes never reach the callbacks. This builds the same
+    model | PydanticOutputParser pair ChatAnthropic builds for json_schema, offline.
+    """
+
+    def __init__(self, json_text: str) -> None:
+        self.json_text = json_text
+
+    def with_structured_output(self, schema, **kwargs):
+        model = GenericFakeChatModel(
+            messages=iter([AIMessage(content=self.json_text, usage_metadata=USAGE)])
+        )
+        return model | PydanticOutputParser(pydantic_object=schema)
+
+
+def test_reasons_chain_logs_token_usage(caplog):
+    caplog.set_level(logging.INFO, logger="app.services.llm")
+    fake = FakeJsonModel('{"reasons": [{"sector_id": 1, "reason": "Short approach."}]}')
+
+    answer = build_reasons_chain(fake).invoke({"query": "q", "sectors": "id=1 | t"})
+
+    assert answer == MatchReasons(reasons=[MatchReason(sector_id=1, reason="Short approach.")])
+    assert "Claude reasons: 10 in / 5 out tokens" in caplog.text
 
 
 def test_get_reasons_chain_is_built_once(monkeypatch, clean_reasons_cache):

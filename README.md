@@ -89,7 +89,7 @@ backend/
       grades.py          GRADE_ORDER, grade_rank(), ranges_overlap().
       geo.py             haversine_km() and the BARCELONA origin.
       search.py          find_matching_sectors(): the Stage 1 filter logic.
-      llm.py             Anthropic client (timeout/retries) + token usage logging.
+      llm.py             Anthropic client (timeout/retries) + token usage logging (log_usage, log_tokens).
       similar_search.py  /search/similar logic: PGVector scores, sectors in rank order, reasons chain.
       embedding.py       Voyage client + embed_query().
       groups.py          generate_share_code() (secrets, readable alphabet).
@@ -105,7 +105,8 @@ backend/
       loader.py          SectorLoader: sectors as LangChain Documents.
       vectorstore.py     Voyage embeddings + PGVector store, collection "sectors"
                          (built once per process, cosine distance).
-      llm.py             get_chat_model(): ChatAnthropic with the Stage 3 settings.
+      llm.py             get_chat_model(): ChatAnthropic with the Stage 3 settings;
+                         UsageLogger callback (token usage).
       chain.py           RAG prompt, format_docs(), build_rag_chain().
       reasons.py         Per-sector match reasons: prompt, MatchReasons, build_reasons_chain(), get_reasons_chain().
 
