@@ -1,6 +1,6 @@
 ---
 name: write-resolution-plan
-description: Turn a Ready ticket from tickets/ into an ordered resolution plan (approach, small increments with files and tests, acceptance-criteria coverage, risks), saved next to the ticket. Use after /qualify-ticket, when a ticket is Ready and before any code is written.
+description: Turn a Ready ticket from tickets/ into a resolution plan (approach, one delivery with files and tests, acceptance-criteria coverage, risks), saved next to the ticket. Use after /qualify-ticket, when a ticket is Ready and before any code is written.
 argument-hint: "[ticket file, e.g. tickets/001-max-approach-time.md]"
 allowed-tools: Read Grep Glob
 ---
@@ -28,16 +28,19 @@ $ARGUMENTS
    one or two lines and say why you picked one.
 4. For every step, name the existing code it reuses (see "Reuse before
    writing" in CLAUDE.md). Only add a new helper when nothing fits.
-5. Cut the work into increments. Each increment is one commit that leaves
-   the tests green. Migrations go in their own increment, backend before
-   frontend. For each one, give the goal, the files and what changes in
+5. Plan the whole ticket as ONE delivery: one build, one review, one commit
+   that leaves the tests green. Never split it into increments (the user
+   wants each ticket done in one go). Order the work inside it: migration
+   first, then backend, then frontend. Give the files and what changes in
    them, the tests (file::name, what they assert, which acceptance
-   criterion), a manual check, and the commit message.
+   criterion), the expected test count, a manual check, and the commit
+   message. If the ticket looks too big for one delivery, say so in your
+   reply and suggest splitting the TICKET; don't split the plan yourself.
 6. Map every acceptance criterion to at least one test or manual check.
    Call out any criterion left uncovered.
 7. List the risks: migration downgrade, existing data, behaviour that must
    stay unchanged, external services and their rate limits.
 8. Save the plan as `tickets/NNN-short-slug.plan.md` (same number and slug
    as the ticket), following [template.md](template.md).
-9. Reply with the file path, the approach in two sentences, the number of
-   increments, and anything in the ticket that was wrong.
+9. Reply with the file path, the approach in two sentences, the expected
+   test count, and anything in the ticket that was wrong.
