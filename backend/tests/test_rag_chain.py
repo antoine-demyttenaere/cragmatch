@@ -8,11 +8,13 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.runnables import RunnableLambda
+from pydantic import BaseModel
 
 from app.core.config import settings
-from app.rag import reasons
+from app.rag import query_parsing, reasons
 from app.rag.chain import build_rag_chain, format_docs
 from app.rag.llm import get_chat_model
+from app.rag.query_parsing import PARSE_SYSTEM_PROMPT, build_parse_chain, get_parse_chain
 from app.rag.reasons import (
     MatchReason,
     MatchReasons,
@@ -20,10 +22,14 @@ from app.rag.reasons import (
     format_sectors,
     get_reasons_chain,
 )
+from app.schemas.search import ParsedFilters
 from app.scripts import rag_playground
 from app.services.llm import LLM_MODEL
 
 USAGE = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+CLEAR = ParsedFilters(
+    understood=True, min_grade="6b", max_grade="6b", max_distance_km=200, style="sport"
+)
 
 
 def make_docs() -> list[Document]:
@@ -116,7 +122,10 @@ def test_step_6_5_prints_each_stage_and_calls_retriever_twice(monkeypatch, capsy
 class FakeStructuredModel:
     """Stands in for ChatAnthropic: records with_structured_output and the prompt."""
 
-    def __init__(self) -> None:
+    def __init__(self, answer: BaseModel | None = None) -> None:
+        self.answer = answer or MatchReasons(
+            reasons=[MatchReason(sector_id=1, reason="Short approach.")]
+        )
         self.schema = None
         self.kwargs: dict = {}
         self.prompts: list = []
@@ -127,7 +136,7 @@ class FakeStructuredModel:
 
         def respond(prompt_value):
             self.prompts.append(prompt_value)
-            return MatchReasons(reasons=[MatchReason(sector_id=1, reason="Short approach.")])
+            return self.answer
 
         return RunnableLambda(respond)
 
@@ -138,6 +147,13 @@ def clean_reasons_cache():
     get_reasons_chain.cache_clear()
     yield
     get_reasons_chain.cache_clear()
+
+
+@pytest.fixture
+def clean_parse_cache():
+    get_parse_chain.cache_clear()
+    yield
+    get_parse_chain.cache_clear()
 
 
 def test_format_sectors_prefixes_each_doc_with_its_sector_id():
@@ -201,4 +217,39 @@ def test_get_reasons_chain_is_built_once(monkeypatch, clean_reasons_cache):
     monkeypatch.setattr(reasons, "get_chat_model", fake_factory)
 
     assert get_reasons_chain() is get_reasons_chain()
+    assert len(builds) == 1
+
+
+def test_parse_chain_fills_prompt_and_asks_for_json_schema():
+    fake = FakeStructuredModel(answer=CLEAR)
+
+    answer = build_parse_chain(fake).invoke({"query": "around 6b, sport"})
+
+    assert answer == CLEAR
+    assert fake.schema is ParsedFilters
+    assert fake.kwargs["method"] == "json_schema"
+    system, human = fake.prompts[0].to_messages()
+    assert system.content == PARSE_SYSTEM_PROMPT
+    assert human.content == "around 6b, sport"
+
+
+def test_parse_chain_logs_token_usage(caplog):
+    caplog.set_level(logging.INFO, logger="app.services.llm")
+
+    answer = build_parse_chain(FakeJsonModel(CLEAR.model_dump_json())).invoke({"query": "q"})
+
+    assert answer == CLEAR
+    assert "Claude natural_search: 10 in / 5 out tokens" in caplog.text
+
+
+def test_get_parse_chain_is_built_once(monkeypatch, clean_parse_cache):
+    builds = []
+
+    def fake_factory():
+        builds.append(1)
+        return FakeStructuredModel(answer=CLEAR)
+
+    monkeypatch.setattr(query_parsing, "get_chat_model", fake_factory)
+
+    assert get_parse_chain() is get_parse_chain()
     assert len(builds) == 1
