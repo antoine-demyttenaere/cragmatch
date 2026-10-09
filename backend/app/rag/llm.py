@@ -9,7 +9,8 @@ from app.services.llm import LLM_MODEL, log_tokens
 
 
 def get_chat_model(max_tokens: int = 1024) -> ChatAnthropic:
-    # Same timeout and retries as services/llm.py, so both paths fail the same way.
+    # 20 s per attempt instead of the SDK's 600 s default, and 2 retries, so a slow
+    # Claude call fails fast instead of hanging a request.
     # Settings are read here, not at import, so a test can swap the key.
     return ChatAnthropic(
         model=LLM_MODEL,
