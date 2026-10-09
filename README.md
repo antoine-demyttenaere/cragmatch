@@ -80,7 +80,7 @@ backend/
     routers/             HTTP endpoints only; logic lives in services/.
       crags.py           /crags: list, get, create.
       sectors.py         /sectors: CRUD, /sectors/search, /sectors/{id}/stays.
-      search.py          /search/natural (Claude) and /search/similar (LangChain PGVector + reasons chain),
+      search.py          /search/natural (LangChain structured output) and /search/similar (LangChain PGVector + reasons chain),
                          both rate-limited.
       groups.py          /groups: create, read, add/replace/remove members,
                          /groups/{code}/search, and group-aware stays.
@@ -90,6 +90,7 @@ backend/
       geo.py             haversine_km() and the BARCELONA origin.
       search.py          find_matching_sectors(): the Stage 1 filter logic.
       llm.py             Anthropic client (timeout/retries) + token usage logging (log_usage, log_tokens).
+      natural_search.py  /search/natural logic: Claude's filters (parse chain), then find_matching_sectors().
       similar_search.py  /search/similar logic: PGVector scores, sectors in rank order, reasons chain.
       embedding.py       Voyage client + embed_query().
       groups.py          generate_share_code() (secrets, readable alphabet).
@@ -109,6 +110,7 @@ backend/
                          UsageLogger callback (token usage).
       chain.py           RAG prompt, format_docs(), build_rag_chain().
       reasons.py         Per-sector match reasons: prompt, MatchReasons, build_reasons_chain(), get_reasons_chain().
+      query_parsing.py   Natural-language query to ParsedFilters: Stage 3 prompt, build_parse_chain(), get_parse_chain().
 
     scripts/             Run by hand, not part of the API.
       index_sectors_langchain.py  Index sectors into the LangChain PGVector store.
