@@ -35,7 +35,51 @@ The services that the planner's steps will reuse:
 **Out:** any code. LangGraph isn't installed yet: that happens in ticket 007.
 
 ## Sketch
-(Filled in during the step. Ticket 011 compares the final graph against it.)
+Ticket 011 compares the final graph against this sketch, name for name.
+
+```mermaid
+flowchart TD
+    S(["START"]) --> merge_preferences
+    merge_preferences --> cg{"common ground?"}
+    cg -- no --> explain_conflicts
+    explain_conflicts --> E1(["END"])
+    cg -- yes --> search_sectors
+    search_sectors --> pick_sector
+    pick_sector --> left{"a sector left to propose?"}
+    left -- no --> E2(["END, no plan"])
+    left -- yes --> approve_sector[/"approve_sector: group says yes or no"/]
+    approve_sector -- approved --> find_stays
+    find_stays --> propose_plan
+    propose_plan --> E3(["END"])
+    approve_sector -- rejected --> pick_sector
+```
+
+| Step | Reads | Produces | Reuses |
+|---|---|---|---|
+| `merge_preferences` | share code | members, merged filters or conflicts | `merge_preferences()` |
+| `explain_conflicts` | conflicts | the "no plan" message | **new** (only joins the existing conflict strings) |
+| `search_sectors` | members | candidate sectors | `search_for_group(db, members, "strict", "overlap")` |
+| `pick_sector` | candidates, rejections | the chosen sector | **new** (a rule: the first candidate not yet rejected) |
+| `approve_sector` (human) | the chosen sector | approved or rejected, plus a reason | **new** |
+| `find_stays` | the chosen sector | nearby stays | `find_stays_near()` |
+| `propose_plan` | the sector, stays, dates, guests | the final plan | `airbnb_url()`, `booking_url()`, `next_saturday()` |
+
+Note: in strict mode `search_for_group()` runs `merge_preferences()` again internally.
+Merging stays its own step because the graph needs the result before searching, to branch.
+
+**Decision points**
+- Common ground? No leads to `explain_conflicts` and the run ends; yes leads to `search_sectors`.
+- A sector left to propose? No ends the run with no plan; yes goes on to `approve_sector`.
+- Approved? Yes goes on to `find_stays`; no goes back to `pick_sector`, which skips rejected sectors.
+
+**Human checkpoint**
+- `approve_sector`: the group says yes or no to the chosen sector, before any stays are looked up.
+
+**Why a chain can't express this**
+A chain is a fixed pipe: every input runs every step once, in order. This flow skips steps
+(no common ground), loops back (a rejected sector), and has to stop and wait for a person
+before continuing, possibly much later. All of that needs state shared between steps plus
+edges chosen at run time, which is what a graph provides.
 
 ## Notes for the tech lead
 - A Mermaid `flowchart` in this file is enough, since VS Code previews it.
