@@ -1,9 +1,11 @@
 """app/rag chain tests. No network: retriever and model are RunnableLambda fakes."""
 
 import logging
+from types import SimpleNamespace
 
 import pytest
 from langchain_core.documents import Document
+from langchain_core.exceptions import OutputParserException
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.output_parsers import PydanticOutputParser
@@ -240,6 +242,76 @@ def test_parse_chain_logs_token_usage(caplog):
 
     assert answer == CLEAR
     assert "Claude natural_search: 10 in / 5 out tokens" in caplog.text
+
+
+def test_step_6_6_prints_both_parsers_side_by_side(monkeypatch, capsys):
+    parse_calls = []
+    chain_inputs = []
+
+    def fake_parse(**kwargs):
+        parse_calls.append(kwargs)
+        return SimpleNamespace(
+            parsed_output=CLEAR, usage=SimpleNamespace(input_tokens=1, output_tokens=1)
+        )
+
+    def fake_invoke(inputs):
+        chain_inputs.append(inputs)
+        return CLEAR.model_copy(update={"style": None})
+
+    fake_client = SimpleNamespace(messages=SimpleNamespace(parse=fake_parse))
+    monkeypatch.setattr(rag_playground, "client", fake_client)
+    monkeypatch.setattr(
+        rag_playground, "get_parse_chain", lambda: RunnableLambda(fake_invoke)
+    )
+
+    rag_playground.step_6_6(["q one", "q two"])
+
+    lines = capsys.readouterr().out.splitlines()
+    assert "=== Step 6.6: 'q one' ===" in lines
+    assert "=== Step 6.6: 'q two' ===" in lines
+    assert any(line.startswith("style") and "DIFFERS" in line for line in lines)
+    assert any(line.startswith("min_grade") and "same" in line for line in lines)
+    assert len(parse_calls) == 2
+    first = parse_calls[0]
+    assert first["model"] == LLM_MODEL
+    assert first["system"] == PARSE_SYSTEM_PROMPT
+    assert first["output_format"] is ParsedFilters
+    assert first["max_tokens"] == 1024
+    assert first["messages"] == [{"role": "user", "content": "q one"}]
+    assert chain_inputs == [{"query": "q one"}, {"query": "q two"}]
+    assert 3 <= len(rag_playground.NATURAL_QUERIES) <= 4
+
+
+def test_step_6_6_keeps_comparing_when_one_side_fails(monkeypatch, capsys):
+    parse_calls = []
+
+    def fake_parse(**kwargs):
+        parse_calls.append(kwargs)
+        is_first = kwargs["messages"][0]["content"] == "q one"
+        return SimpleNamespace(
+            parsed_output=None if is_first else CLEAR,
+            usage=SimpleNamespace(input_tokens=1, output_tokens=1),
+        )
+
+    def fake_invoke(inputs):
+        if inputs["query"] == "q one":
+            raise OutputParserException("not JSON")
+        return CLEAR
+
+    fake_client = SimpleNamespace(messages=SimpleNamespace(parse=fake_parse))
+    monkeypatch.setattr(rag_playground, "client", fake_client)
+    monkeypatch.setattr(
+        rag_playground, "get_parse_chain", lambda: RunnableLambda(fake_invoke)
+    )
+
+    rag_playground.step_6_6(["q one", "q two"])
+
+    output = capsys.readouterr().out
+    assert "(none)" in output
+    assert "(error: OutputParserException)" in output
+    second = output.split("=== Step 6.6: 'q two' ===")[1]
+    assert any(line.startswith("min_grade") and "same" in line for line in second.splitlines())
+    assert len(parse_calls) == 2
 
 
 def test_get_parse_chain_is_built_once(monkeypatch, clean_parse_cache):
