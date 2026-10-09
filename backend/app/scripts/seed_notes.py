@@ -1,8 +1,13 @@
-from sqlalchemy.orm import joinedload
+"""Fill sectors.approach_notes from the NOTES dict below. No API calls.
+
+    uv run python -m app.scripts.seed_notes
+
+Run after seed and before index_sectors_langchain, because the index embeds
+the notes.
+"""
 
 from app.core.database import SessionLocal
 from app.models import Sector
-from app.services.embedding import EMBED_MODEL, voyage
 
 # Illustrative notes for testing fuzzy search, not verified beta.
 NOTES = {
@@ -22,27 +27,11 @@ NOTES = {
 }
 
 
-def build_text(sector: Sector) -> str:
-    return f"{sector.name} at {sector.crag.name} in {sector.crag.region}. Style: {sector.style.value}. Grades: {sector.grade_min} to {sector.grade_max}. Approach: {sector.approach_notes}"
-
-
-def main():
+def main() -> None:
     db = SessionLocal()
     try:
-        sectors = db.query(Sector).options(joinedload(Sector.crag)).all()
-
-        # 1. Attach the notes
-        for s in sectors:
+        for s in db.query(Sector).all():
             s.approach_notes = NOTES.get(s.name)
-
-        # 2. Embed all texts in ONE API call (a list in, a list out, same order)
-        texts = [build_text(s) for s in sectors]
-        result = voyage.embed(texts, model=EMBED_MODEL, input_type="document")
-
-        # 3. loop over sectors and result.embeddings together (zip),
-        #    assigning each vector to sector.embedding. Then db.commit().
-        for sector, embedding in zip(sectors, result.embeddings):
-            sector.embedding = embedding
         db.commit()
     finally:
         db.close()

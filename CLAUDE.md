@@ -8,8 +8,9 @@ Full file tree and run instructions: `README.md`.
 - Backend: Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2.0, Alembic, uv.
 - Database: Postgres 17 + PostGIS + pgvector in Docker on host port 5433
   (5432 is taken by a native Postgres on this machine).
-- AI: Claude via the Anthropic SDK (`app/services/llm.py`), Voyage
-  `voyage-3.5` embeddings, 1024 dims (`app/services/embedding.py`).
+- AI: Claude through LangChain's ChatAnthropic (`app/rag/llm.py`; model name in
+  `app/services/llm.py`), Voyage `voyage-3.5` embeddings, 1024 dims, through
+  LangChain (`app/rag/vectorstore.py`; model name in `app/services/embedding.py`).
   Stage 6 LangChain/LangGraph code lives in `app/rag/`.
 - Frontend: React 19 + TypeScript + Vite.
 
@@ -21,7 +22,7 @@ Backend commands run from `backend/`, frontend commands from `frontend/`.
 - `uv run pytest tests/test_groups_api.py::test_name -x`: one test, stop on first failure
 - `uv run alembic revision --autogenerate -m "..."` then `uv run alembic upgrade head`
 - Fresh DB: seed scripts in README "Running locally" (order matters;
-  `embed_sectors` hits Voyage's 3 req/min limit)
+  `seed_notes` must run before `index_sectors_langchain`, which makes 1 Voyage request)
 - `npm run dev`: frontend on :5173
 - `npm run lint`: ESLint, must pass for frontend changes
 
@@ -45,8 +46,11 @@ Backend commands run from `backend/`, frontend commands from `frontend/`.
 - Group logic: `merge_preferences()` (strict) and `score_sectors()` /
   `why_not()` (scored) in `services/group_matching.py`.
 - Stays: `find_stays_near()`, `airbnb_url()`, `booking_url()` in `services/stays.py`.
-- Claude calls: the client, `LLM_MODEL` and `log_usage()` in `services/llm.py`.
-- Embeddings: `embed_query()` and `EMBED_MODEL` in `services/embedding.py`.
+- Claude: `get_chat_model()` and `UsageLogger` in `rag/llm.py`, `LLM_MODEL` and
+  `log_tokens()` in `services/llm.py`.
+- Embeddings and vector search: `get_embeddings()` / `get_vector_store()` in
+  `rag/vectorstore.py`, `EMBED_MODEL` in `services/embedding.py`.
+- Sector text: `SectorLoader` / `build_text()` in `rag/loader.py`.
 - FastAPI dependencies: `get_db` (`core/dependencies.py`), `get_group` /
   `get_member` (`routers/groups.py`), `load_sector` (`routers/sectors.py`).
 - Frontend: `apiRequest()` and `errorMessage()` in `api.ts`; grades/styles in
@@ -85,8 +89,9 @@ Backend commands run from `backend/`, frontend commands from `frontend/`.
 - Stop a process only by its exact, verified PID, never by matching
   command-line text (that has killed the Vite server before).
 - `pgvector` is pinned `<0.4` because `langchain-postgres` requires it.
-- LangChain's PGVector uses its own tables (`langchain_pg_*`), separate from
-  `sectors.embedding`.
+- Sector vectors live only in LangChain's tables (`langchain_pg_*`, collection
+  `sectors`); the `sectors` table has no vector column. After changing the notes
+  or `build_text()`, re-run `seed_notes` / `index_sectors_langchain`.
 - The user's terminal is Windows PowerShell 5.1: it mangles double quotes inside
   arguments to git. Commit messages must not contain `"`.
 

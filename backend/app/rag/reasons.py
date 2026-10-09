@@ -55,6 +55,6 @@ def build_reasons_chain(llm: BaseChatModel) -> Runnable:
 
 @lru_cache(maxsize=1)
 def get_reasons_chain() -> Runnable:
-    # One Anthropic client per process, like services/llm.py. lru_cache doesn't
-    # cache exceptions, so a failed build is retried on the next call.
+    # Build the ChatAnthropic model (get_chat_model()) once per process.
+    # lru_cache doesn't cache exceptions, so a failed build is retried on the next call.
     return build_reasons_chain(get_chat_model())

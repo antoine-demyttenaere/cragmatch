@@ -21,9 +21,9 @@ Runs at http://localhost:8000 — docs at /docs.
 First time only, fill the database with sample data:
 ```
 uv run python -m app.scripts.seed             # crags + sectors
-uv run python -m app.scripts.embed_sectors    # approach notes + Voyage embeddings
+uv run python -m app.scripts.seed_notes       # approach notes (no API calls)
 uv run python -m app.scripts.index_sectors_langchain   # LangChain PGVector index, used by /search/similar
-                                                       # (needs the approach notes from embed_sectors; 1 Voyage request)
+                                                       # (needs the approach notes from seed_notes; 1 Voyage request)
 uv run python -m app.scripts.seed_stays       # hand-picked stays (run before the import)
 uv run python -m app.scripts.import_stays     # campsites/hostels/huts from OpenStreetMap
 ```
@@ -62,8 +62,7 @@ backend/
 
     models/              SQLAlchemy ORM models (database tables).
       crag.py            Crag; one crag has many sectors.
-      sector.py          Sector + ClimbingStyle, approach_notes, approach_minutes,
-                         pgvector embedding.
+      sector.py          Sector + ClimbingStyle, approach_notes, approach_minutes.
       group.py           Group (name, unique share_code); has many members.
       member.py          Member of a group, with optional preferences
                          (grade range, max distance, max walk-in minutes, styles; empty = any).
@@ -89,10 +88,10 @@ backend/
       grades.py          GRADE_ORDER, grade_rank(), ranges_overlap().
       geo.py             haversine_km() and the BARCELONA origin.
       search.py          find_matching_sectors(): the Stage 1 filter logic.
-      llm.py             Anthropic client (timeout/retries) + token usage logging (log_usage, log_tokens).
+      llm.py             LLM_MODEL + log_tokens(): Claude model name and token usage log line, used by app/rag/.
       natural_search.py  /search/natural logic: Claude's filters (parse chain), then find_matching_sectors().
       similar_search.py  /search/similar logic: PGVector scores, sectors in rank order, reasons chain.
-      embedding.py       Voyage client + embed_query().
+      embedding.py       EMBED_MODEL (voyage-3.5), used by app/rag/vectorstore.py.
       groups.py          generate_share_code() (secrets, readable alphabet).
       group_matching.py  PURE (no DB): merge_preferences() for strict mode,
                          score_sectors() for scored mode.
@@ -103,20 +102,20 @@ backend/
                          fallback server, cache), parse, duplicate detection.
 
     rag/                 Stage 6 LangChain code.
-      loader.py          SectorLoader: sectors as LangChain Documents.
+      loader.py          SectorLoader + build_text(): sectors as LangChain Documents.
       vectorstore.py     Voyage embeddings + PGVector store, collection "sectors"
                          (built once per process, cosine distance).
-      llm.py             get_chat_model(): ChatAnthropic with the Stage 3 settings;
+      llm.py             get_chat_model(): ChatAnthropic (timeout, retries);
                          UsageLogger callback (token usage).
       chain.py           RAG prompt, format_docs(), build_rag_chain().
       reasons.py         Per-sector match reasons: prompt, MatchReasons, build_reasons_chain(), get_reasons_chain().
-      query_parsing.py   Natural-language query to ParsedFilters: Stage 3 prompt, build_parse_chain(), get_parse_chain().
+      query_parsing.py   Natural-language query to ParsedFilters: parse prompt, build_parse_chain(), get_parse_chain().
 
     scripts/             Run by hand, not part of the API.
       index_sectors_langchain.py  Index sectors into the LangChain PGVector store.
-      rag_playground.py  Stage 6 steps, one function per step.
+      rag_playground.py  Stage 6 steps 6.2, 6.4, 6.5, one function per step.
       seed.py            Sample Catalan crags/sectors.
-      embed_sectors.py   Approach notes + a Voyage embedding per sector.
+      seed_notes.py      Illustrative approach notes per sector (run before indexing).
       seed_stays.py      Small hand-picked list of stays (illustrative).
       import_stays.py    Stays around every crag from OpenStreetMap.
 

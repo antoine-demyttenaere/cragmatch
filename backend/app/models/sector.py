@@ -1,7 +1,6 @@
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,4 +31,3 @@ class Sector(Base):
     approach_notes: Mapped[str | None] = mapped_column(String(500))
     # One way, car park to the foot of the sector. NULL = unknown.
     approach_minutes: Mapped[int | None]
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024))

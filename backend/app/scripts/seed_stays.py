@@ -5,7 +5,7 @@ duplicate these.
 
     uv run python -m app.scripts.seed_stays
 
-ILLUSTRATIVE sample data, like the sector notes in embed_sectors.py: names,
+ILLUSTRATIVE sample data, like the sector notes in seed_notes.py: names,
 positions and prices are placeholders near each crag, not verified
 listings. Replace them with places you actually know before relying on them.
 """

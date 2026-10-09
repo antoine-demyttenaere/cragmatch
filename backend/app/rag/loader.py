@@ -5,7 +5,10 @@ from langchain_core.documents import Document
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Sector
-from app.scripts.embed_sectors import build_text
+
+
+def build_text(sector: Sector) -> str:
+    return f"{sector.name} at {sector.crag.name} in {sector.crag.region}. Style: {sector.style.value}. Grades: {sector.grade_min} to {sector.grade_max}. Approach: {sector.approach_notes}"
 
 
 class SectorLoader(BaseLoader):
@@ -18,8 +21,8 @@ class SectorLoader(BaseLoader):
         sectors = self.db.query(Sector).options(joinedload(Sector.crag)).order_by(Sector.id).all()
         for sector in sectors:
             yield Document(
-                # The text that will be embedded: exactly the same string
-                # as Stage 3's embed_sectors.py produces.
+                # The text that will be embedded: changing build_text() means
+                # re-running index_sectors_langchain.
                 page_content=build_text(sector),
                 # Not embedded. Travels alongside the text, so after a
                 # search we know which sector a Document came from.
