@@ -4,12 +4,14 @@ Run a single step:
     uv run python -m app.scripts.rag_playground 6.2
     uv run python -m app.scripts.rag_playground 6.4
     uv run python -m app.scripts.rag_playground 6.5
+    uv run python -m app.scripts.rag_playground 6.6
 
 Steps that call Voyage say how many requests they make: the free tier
 allows 3 per minute.
 """
 
 import sys
+from collections.abc import Callable
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -19,7 +21,17 @@ from app.models import Sector
 from app.rag.chain import RAG_PROMPT, build_rag_chain, format_docs
 from app.rag.llm import get_chat_model
 from app.rag.loader import SectorLoader
+from app.rag.query_parsing import PARSE_SYSTEM_PROMPT, get_parse_chain
 from app.rag.vectorstore import get_embeddings, get_vector_store
+from app.schemas.search import ParsedFilters
+from app.services.llm import LLM_MODEL, client, log_usage
+
+NATURAL_QUERIES = [
+    "something around 6b, not too far, sport",
+    "easy bouldering, at most an hour and a half by car",
+    "long multi-pitch routes between 6a and 6c+",
+    "what is your favorite color",   # off-topic: both sides should say understood=False
+]
 
 
 def show(title, docs):
@@ -134,7 +146,57 @@ def step_6_5(query: str = "quiet crag with a short approach, good for a beginner
     print(chain_answer)
 
 
-STEPS = {"6.2": step_6_2, "6.3": step_6_3, "6.4": step_6_4, "6.5": step_6_5}
+def parse_with_messages_api(query: str) -> ParsedFilters | None:
+    """Stage 3's call, kept here for the comparison now that it left the router."""
+    response = client.messages.parse(
+        model=LLM_MODEL,
+        max_tokens=1024,
+        system=PARSE_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": query}],
+        output_format=ParsedFilters,
+    )
+    log_usage("natural_search_stage3", response)
+    return response.parsed_output
+
+
+def run_side(call: Callable[[], ParsedFilters | None]) -> ParsedFilters | None | Exception:
+    # The SDK returns None for an unusable answer where LangChain raises, and a
+    # playground should show both instead of stopping at the first failure.
+    try:
+        return call()
+    except Exception as exc:
+        return exc
+
+
+def show_value(result: ParsedFilters | None | Exception, field: str) -> str:
+    if isinstance(result, Exception):
+        return f"(error: {type(result).__name__})"
+    return "(none)" if result is None else repr(getattr(result, field))
+
+
+def step_6_6(queries: list[str] = NATURAL_QUERIES):
+    """Stage 3 messages.parse vs. LangChain with_structured_output, same prompt and
+    schema. 2 Claude calls per query, no Voyage."""
+    chain = get_parse_chain()
+    for query in queries:
+        stage3 = run_side(lambda: parse_with_messages_api(query))
+        langchain = run_side(lambda: chain.invoke({"query": query}))
+
+        print(f"\n=== Step 6.6: '{query}' ===")
+        print(f"{'field':<16}{'Stage 3':<24}{'LangChain':<24}")
+        for field in ParsedFilters.model_fields:
+            left = show_value(stage3, field)
+            right = show_value(langchain, field)
+            verdict = "same" if left == right else "DIFFERS"
+            print(f"{field:<16}{left:<24}{right:<24}{verdict}")
+
+    print(
+        "\nDifferences in max_distance_km or the grades are normal: they are Claude's "
+        "estimates and two calls can round differently."
+    )
+
+
+STEPS = {"6.2": step_6_2, "6.3": step_6_3, "6.4": step_6_4, "6.5": step_6_5, "6.6": step_6_6}
 
 
 if __name__ == "__main__":
