@@ -114,7 +114,7 @@ backend/
     agent/               Stage 6 LangGraph trip planner.
       state.py           TripState (what flows through the trip planner), PlannerContext (db session), initial_state()
       nodes.py           One function per trip-planner step; each calls an existing service.
-      graph.py           build_trip_planner(): nodes, edges, and the "no common ground" branch.
+      graph.py           build_trip_planner(): nodes, edges, the "no common ground" branch; pauses at approve_sector (interrupt + InMemorySaver).
 
     scripts/             Run by hand, not part of the API.
       index_sectors_langchain.py  Index sectors into the LangChain PGVector store.

@@ -9,18 +9,28 @@ session is `runtime.context.db`.
 """
 
 from dataclasses import asdict
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 from langgraph.runtime import Runtime
+from langgraph.types import interrupt
+from sqlalchemy.orm import Session
 
-from app.agent.state import Candidate, MemberPrefs, PlannerContext, TripState
+from app.agent.state import (
+    Approval,
+    Candidate,
+    MemberPrefs,
+    PlannerContext,
+    TripPlan,
+    TripState,
+)
 from app.models import Member, Sector
 from app.schemas.group import GroupSectorMatch
-from app.schemas.stay import NearbyStay
+from app.schemas.stay import BookingLinks, NearbyStay
 from app.services.group_matching import FitMode, merge_preferences
 from app.services.group_search import SearchMode, search_for_group
 from app.services.groups import find_group
-from app.services.stays import find_stays_near
+from app.services.stays import airbnb_url, booking_url, find_stays_near
 
 # The planner proposes a sector *everyone* can climb, so strict; overlap is the
 # app's default fit.
@@ -29,6 +39,9 @@ FIT: FitMode = "overlap"
 
 STAY_RADIUS_KM = 10  # the stays endpoint's default
 MAX_STAYS = 5  # a plan is a shortlist, and the state stays readable
+# The ticket's default: after three rejections the group should change its
+# preferences, not keep clicking "no".
+MAX_PROPOSALS = 3
 
 
 def _member_prefs(member: Member) -> MemberPrefs:
@@ -90,11 +103,45 @@ def search_sectors(state: TripState, runtime: Runtime[PlannerContext]) -> dict:
         runtime.context.db, _as_members(state["members"]), SEARCH_MODE, FIT
     )
     candidates = [_candidate(m) for m in response.results]
-    # Picking the top result is a fixed rule until ticket 010 (approval) moves
-    # it into its own pick_sector node.
+    update: dict = {"candidates": candidates}
+    if not response.results:
+        update["message"] = response.message
+    return update
+
+
+def pick_sector(state: TripState) -> dict:
+    # Pure: no DB, no runtime. It runs again after every rejection and reads the
+    # rejections the state has collected.
+    rejected = {r["sector_id"] for r in state.get("rejections", [])}
+    if len(rejected) >= MAX_PROPOSALS:
+        return {
+            "chosen_sector": None,
+            "message": f"No plan: the group turned down {len(rejected)} sectors.",
+        }
+
+    for candidate in state["candidates"]:
+        if candidate["sector_id"] not in rejected:
+            return {"chosen_sector": candidate, "approved": None}
+
     return {
-        "candidates": candidates,
-        "chosen_sector": candidates[0] if candidates else None,
+        "chosen_sector": None,
+        "message": state.get("message") or "No plan: every candidate was turned down.",
+    }
+
+
+def approve_sector(state: TripState) -> dict:
+    chosen = state["chosen_sector"]
+    # On resume this function runs again from the top, so nothing before
+    # interrupt() may have side effects (no DB writes, no prints that matter).
+    decision = interrupt(
+        {"question": "Plan the trip around this sector?", "sector": chosen},
+        response_schema=Approval,
+    )
+    if decision.approved:
+        return {"approved": True}
+    return {
+        "approved": False,
+        "rejections": [{"sector_id": chosen["sector_id"], "reason": decision.reason or ""}],
     }
 
 
@@ -104,13 +151,17 @@ def explain_conflicts(state: TripState) -> dict:
     return {"message": "No common ground, so no search: " + " ".join(state["conflicts"])}
 
 
+def _sector_with_crag(db: Session, sector_id: int) -> Sector | None:
+    return db.get(Sector, sector_id)
+
+
 def find_stays(state: TripState, runtime: Runtime[PlannerContext]) -> dict:
     chosen = state.get("chosen_sector")
     if chosen is None:
         return {"stays": []}
 
     db = runtime.context.db
-    sector = db.get(Sector, chosen["sector_id"])
+    sector = _sector_with_crag(db, chosen["sector_id"])
     if sector is None:  # deleted since the search
         return {"stays": []}
 
@@ -123,3 +174,30 @@ def find_stays(state: TripState, runtime: Runtime[PlannerContext]) -> dict:
             for stay, distance in nearby
         ]
     }
+
+
+def propose_plan(state: TripState, runtime: Runtime[PlannerContext]) -> dict:
+    chosen = state["chosen_sector"]
+    sector = _sector_with_crag(runtime.context.db, chosen["sector_id"])
+    if sector is None:  # deleted while the group was deciding
+        return {"plan": None, "message": "No plan: the chosen sector no longer exists."}
+
+    crag = sector.crag
+    checkin = date.fromisoformat(state["checkin"])
+    checkout = checkin + timedelta(days=state["nights"])
+    guests = state["guests"]
+    # Same arguments as the group stays endpoint, so both give the same links.
+    links = BookingLinks(
+        airbnb=airbnb_url(crag.latitude, crag.longitude, checkin, checkout, guests),
+        booking=booking_url(crag.name, crag.latitude, crag.longitude, checkin, checkout, guests),
+    )
+    plan: TripPlan = {
+        "sector": chosen,
+        "checkin": checkin.isoformat(),
+        "checkout": checkout.isoformat(),
+        "nights": state["nights"],
+        "guests": guests,
+        "stays": state["stays"],
+        "links": links.model_dump(),
+    }
+    return {"plan": plan, "message": None}
