@@ -114,10 +114,11 @@ backend/
     agent/               Stage 6 LangGraph trip planner.
       state.py           TripState (what flows through the trip planner), PlannerContext (db session), initial_state()
       nodes.py           One function per trip-planner step; each calls an existing service.
+      graph.py           build_trip_planner(): nodes, edges, and the "no common ground" branch.
 
     scripts/             Run by hand, not part of the API.
       index_sectors_langchain.py  Index sectors into the LangChain PGVector store.
-      rag_playground.py  Stage 6 steps 6.2, 6.4, 6.5, then the trip planner steps from 6.8 on (6.9a to 6.9c add the nodes),
+      rag_playground.py  Stage 6 steps 6.2, 6.4, 6.5, then the trip planner steps from 6.8 on (6.9a to 6.9c add the nodes, 6.10 the routed graph),
                          one function per step; a step can take an argument (`... 6.8 SHARECODE`).
       seed.py            Sample Catalan crags/sectors.
       seed_notes.py      Illustrative approach notes per sector (run before indexing).
