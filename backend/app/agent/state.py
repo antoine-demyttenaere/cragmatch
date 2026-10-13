@@ -69,6 +69,8 @@ class TripState(TypedDict, total=False):
     chosen_sector: Candidate | None  # search_sectors (top result until ticket 010 adds pick_sector)
     stays: list[dict]  # find_stays (NearbyStay dumped to JSON-safe dicts)
     plan: TripPlan | None  # propose_plan
+    # Why there's no plan, for the group: explain_conflicts (ticket 010: also pick_sector)
+    message: str | None
 
 
 @dataclass

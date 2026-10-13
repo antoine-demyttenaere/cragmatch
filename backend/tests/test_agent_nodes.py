@@ -4,7 +4,12 @@ import pytest
 from langgraph.runtime import Runtime
 
 from app.agent import nodes
-from app.agent.nodes import find_stays, merge_group_preferences, search_sectors
+from app.agent.nodes import (
+    explain_conflicts,
+    find_stays,
+    merge_group_preferences,
+    search_sectors,
+)
 from app.agent.state import PlannerContext, initial_state
 from app.schemas.group import GroupSearchResponse
 
@@ -172,3 +177,14 @@ def test_find_stays_without_a_chosen_sector_is_empty(db_session):
     update = find_stays({"chosen_sector": None}, runtime(db_session))
 
     assert update == {"stays": []}
+
+
+def test_explain_conflicts_joins_the_conflicts_into_a_message():
+    state = {"conflicts": ["No grade everyone climbs: Ana vs Marc.", "Second problem."]}
+
+    update = explain_conflicts(state)
+
+    assert update == {
+        "message": "No common ground, so no search: "
+        "No grade everyone climbs: Ana vs Marc. Second problem."
+    }

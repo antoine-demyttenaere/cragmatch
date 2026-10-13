@@ -98,6 +98,12 @@ def search_sectors(state: TripState, runtime: Runtime[PlannerContext]) -> dict:
     }
 
 
+def explain_conflicts(state: TripState) -> dict:
+    # The conflict strings are already readable; wording them with Claude is out of
+    # scope. No `runtime` parameter: LangGraph injects it only if it's declared.
+    return {"message": "No common ground, so no search: " + " ".join(state["conflicts"])}
+
+
 def find_stays(state: TripState, runtime: Runtime[PlannerContext]) -> dict:
     chosen = state.get("chosen_sector")
     if chosen is None:
