@@ -7,6 +7,7 @@ Run a single step:
     uv run python -m app.scripts.rag_playground 6.8 [share_code]
     uv run python -m app.scripts.rag_playground 6.9a [share_code]   (also 6.9b, 6.9c)
     uv run python -m app.scripts.rag_playground 6.10 [share_code ...]
+    uv run python -m app.scripts.rag_playground 6.11 [share_code] [answer ...]   (yes, or no:<reason>)
 
 Steps from 6.8 on build the LangGraph trip planner and can take an argument.
 Steps 6.3 and 6.6 compared Stage 3 with LangChain and were removed in ticket
@@ -19,13 +20,16 @@ allows 3 per minute.
 import sys
 from pprint import pprint
 from typing import Callable
+from uuid import uuid4
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import Command
 
 from app.agent.graph import build_trip_planner
-from app.agent.nodes import find_stays, merge_group_preferences, search_sectors
+from app.agent.nodes import find_stays, merge_group_preferences, pick_sector, search_sectors
 from app.agent.state import PlannerContext, TripState, initial_state
 from app.core.database import SessionLocal
 from app.rag.chain import RAG_PROMPT, build_rag_chain, format_docs
@@ -153,6 +157,7 @@ def _run_line(share_code: str, *nodes: tuple[str, Callable]) -> dict:
 
 MERGE = ("merge_preferences", merge_group_preferences)
 SEARCH = ("search_sectors", search_sectors)
+PICK = ("pick_sector", pick_sector)
 STAYS = ("find_stays", find_stays)
 
 
@@ -188,25 +193,36 @@ def step_6_9b(share_code: str = "9JS3VA3C"):
 
 
 def step_6_9c(share_code: str = "9JS3VA3C"):
-    """Three nodes: merge, search, then find_stays. No network."""
-    _print_state("Step 6.9c: after find_stays", _run_line(share_code, MERGE, SEARCH, STAYS))
+    """Four nodes: merge, search, pick_sector, then find_stays. No network."""
+    print("Note: since 6.11 picking the sector is its own node (pick_sector), not part of search.")
+    _print_state(
+        "Step 6.9c: after find_stays", _run_line(share_code, MERGE, SEARCH, PICK, STAYS)
+    )
 
 
 def step_6_10(*share_codes: str):
     """The routed graph: print its diagram, then run one group per code. No network."""
-    graph = build_trip_planner()
+    # A checkpointer, because a group with common ground now pauses at approve_sector.
+    graph = build_trip_planner(InMemorySaver())
     print("\n=== Step 6.10: diagram (paste into a mermaid block) ===")
     print(graph.get_graph().draw_mermaid())
 
     for code in share_codes or ("9JS3VA3C",):
         path = []
+        config = {"configurable": {"thread_id": str(uuid4())}}
         with SessionLocal() as db:
             updates = graph.stream(
-                initial_state(code), context=PlannerContext(db=db), stream_mode="updates"
+                initial_state(code),
+                config,
+                context=PlannerContext(db=db),
+                stream_mode="updates",
             )
             state: dict = {}
             for update in updates:
                 for node, changes in update.items():
+                    if node == "__interrupt__":
+                        path.append("paused at approve_sector (step 6.11 answers it)")
+                        continue
                     path.append(node)
                     state.update(changes)
         print(f"\n=== Step 6.10: group {code} ===")
@@ -215,6 +231,56 @@ def step_6_10(*share_codes: str):
             print(state["message"])
         else:
             print("Stays:", [_stay_line(s) for s in state.get("stays", [])])
+
+
+def _parse_answer(answer: str) -> dict:
+    """'yes' -> approved; 'no' or 'no:<reason>' -> rejected."""
+    if answer.lower() == "yes":
+        return {"approved": True}
+    _, _, reason = answer.partition(":")
+    return {"approved": False, "reason": reason}
+
+
+def step_6_11(share_code: str = "9JS3VA3C", *answers: str):
+    """Pause at approve_sector, then answer: yes, or no:<reason>. No network.
+
+    Example: 6.11 <code> "no:too far" yes
+    """
+    graph = build_trip_planner(InMemorySaver())
+    config = {"configurable": {"thread_id": str(uuid4())}}
+
+    with SessionLocal() as db:
+        # context= is passed again on every call: it isn't saved in the checkpoint.
+        context = PlannerContext(db=db)
+        output = graph.invoke(initial_state(share_code), config, context=context)
+        print("\n=== Step 6.11: first run ===")
+
+        for answer in answers:
+            if "__interrupt__" not in output:
+                break
+            question = output["__interrupt__"][0].value
+            print("Paused. Question:", question["question"])
+            print("Proposed:", _candidate_line(question["sector"]))
+            snapshot = graph.get_state(config)
+            print("next =", snapshot.next)
+            print("chosen_sector =", _candidate_line(snapshot.values["chosen_sector"]))
+            print("There is no 'stays' key yet:", "stays" not in snapshot.values)
+
+            print(f"\n--- answer: {answer} ---")
+            output = graph.invoke(Command(resume=_parse_answer(answer)), config, context=context)
+
+        if "__interrupt__" in output:
+            question = output["__interrupt__"][0].value
+            print("Still paused on:", _candidate_line(question["sector"]))
+        elif output.get("plan"):
+            plan = output["plan"]
+            print("\nPlan:", _candidate_line(plan["sector"]))
+            print("Dates:", plan["checkin"], "to", plan["checkout"], "for", plan["guests"])
+            print("Stays:", [_stay_line(s) for s in plan["stays"]])
+            print("Links:", plan["links"])
+        else:
+            print("\nNo plan:", output.get("message"))
+        print("Rejections:", output.get("rejections"))
 
 
 STEPS = {
@@ -226,6 +292,7 @@ STEPS = {
     "6.9b": step_6_9b,
     "6.9c": step_6_9c,
     "6.10": step_6_10,
+    "6.11": step_6_11,
 }
 
 

@@ -5,12 +5,15 @@ from langgraph.runtime import Runtime
 
 from app.agent import nodes
 from app.agent.nodes import (
+    approve_sector,
     explain_conflicts,
     find_stays,
     merge_group_preferences,
+    pick_sector,
+    propose_plan,
     search_sectors,
 )
-from app.agent.state import PlannerContext, initial_state
+from app.agent.state import Approval, PlannerContext, initial_state
 from app.schemas.group import GroupSearchResponse
 
 AGREEING = [
@@ -87,7 +90,7 @@ def test_merge_group_without_members_is_a_conflict(db_session, make_group):
     assert update["guests"] == 1
 
 
-def test_search_returns_candidates_best_first_and_picks_the_top(db_session, make_group, make_sector):
+def test_search_returns_candidates_best_first(db_session, make_group, make_sector):
     group = make_group(members=[{"name": "Ana", "grade_min": "6a", "grade_max": "7a"}])
     make_sector("Far", "6a", "7a", **SIURANA)
     make_sector("Near", "6a", "7a")
@@ -98,9 +101,9 @@ def test_search_returns_candidates_best_first_and_picks_the_top(db_session, make
     update = search_sectors(state, runtime(db_session))
 
     assert [c["sector_name"] for c in update["candidates"]] == ["Near", "Far"]
-    assert update["chosen_sector"] == update["candidates"][0]
-    assert update["chosen_sector"]["crag_name"] == "Montserrat"
-    assert update["chosen_sector"]["style"] == "sport"
+    assert update["candidates"][0]["crag_name"] == "Montserrat"
+    assert update["candidates"][0]["style"] == "sport"
+    assert "chosen_sector" not in update
     json.dumps(update)
 
 
@@ -113,7 +116,8 @@ def test_search_without_matching_sectors_chooses_nothing(db_session, make_group,
     update = search_sectors(state, runtime(db_session))
 
     assert update["candidates"] == []
-    assert update["chosen_sector"] is None
+    assert "chosen_sector" not in update
+    assert update["message"] == "The group agrees on filters, but no sector matches them."
 
 
 def test_search_calls_the_group_search_service(db_session, make_group, monkeypatch):
@@ -135,19 +139,109 @@ def test_search_calls_the_group_search_service(db_session, make_group, monkeypat
     assert calls == [("strict", "overlap", ["Ana", "Marc"])]
 
 
-def chosen_state(sector) -> dict:
+def candidate(sector_id: int, name: str = "Sector") -> dict:
     return {
-        "chosen_sector": {
-            "sector_id": sector.id,
-            "sector_name": sector.name,
-            "crag_name": "Montserrat",
-            "style": "sport",
-            "grade_min": "6a",
-            "grade_max": "7a",
-            "approach_minutes": None,
-            "distance_km": 37.0,
-        }
+        "sector_id": sector_id,
+        "sector_name": name,
+        "crag_name": "Montserrat",
+        "style": "sport",
+        "grade_min": "6a",
+        "grade_max": "7a",
+        "approach_minutes": None,
+        "distance_km": 37.0,
     }
+
+
+def chosen_state(sector) -> dict:
+    return {"chosen_sector": candidate(sector.id, sector.name)}
+
+
+def rejection(sector_id: int) -> dict:
+    return {"sector_id": sector_id, "reason": "no"}
+
+
+def test_pick_sector_takes_the_first_candidate():
+    state = {"candidates": [candidate(1), candidate(2)]}
+
+    update = pick_sector(state)
+
+    assert update == {"chosen_sector": candidate(1), "approved": None}
+
+
+def test_pick_sector_skips_rejected_sectors():
+    state = {
+        "candidates": [candidate(1), candidate(2), candidate(3)],
+        "rejections": [rejection(1)],
+    }
+
+    update = pick_sector(state)
+
+    assert update["chosen_sector"]["sector_id"] == 2
+
+
+def test_pick_sector_stops_after_three_rejections():
+    state = {
+        "candidates": [candidate(i) for i in range(1, 6)],
+        "rejections": [rejection(1), rejection(2), rejection(3)],
+    }
+
+    update = pick_sector(state)
+
+    assert update["chosen_sector"] is None
+    assert update["message"] == "No plan: the group turned down 3 sectors."
+
+
+def test_pick_sector_with_nothing_left_keeps_the_search_message():
+    state = {
+        "candidates": [candidate(1)],
+        "rejections": [rejection(1)],
+        "message": "The group agrees on filters, but no sector matches them.",
+    }
+
+    update = pick_sector(state)
+
+    assert update["chosen_sector"] is None
+    assert update["message"] == "The group agrees on filters, but no sector matches them."
+
+
+def test_approve_sector_records_a_rejection(monkeypatch):
+    monkeypatch.setattr(nodes, "interrupt", lambda *a, **k: Approval(approved=False, reason="x"))
+
+    update = approve_sector({"chosen_sector": candidate(7)})
+
+    assert update == {"approved": False, "rejections": [{"sector_id": 7, "reason": "x"}]}
+
+
+def test_approve_sector_records_an_approval(monkeypatch):
+    monkeypatch.setattr(nodes, "interrupt", lambda *a, **k: Approval(approved=True))
+
+    update = approve_sector({"chosen_sector": candidate(7)})
+
+    assert update == {"approved": True}
+
+
+def test_propose_plan_has_dates_guests_stays_and_links(db_session, make_sector):
+    sector = make_sector("Near", "6a", "7a")
+    state = {
+        **chosen_state(sector),
+        "checkin": "2026-11-07",
+        "nights": 2,
+        "guests": 3,
+        "stays": [{"stay": {"name": "Close"}, "distance_km": 1.0}],
+    }
+
+    update = propose_plan(state, runtime(db_session))
+
+    plan = update["plan"]
+    assert plan["checkout"] == "2026-11-09"
+    assert plan["guests"] == 3
+    assert plan["sector"]["sector_id"] == sector.id
+    assert plan["stays"] == state["stays"]
+    assert "checkin=2026-11-07" in plan["links"]["airbnb"]
+    assert "adults=3" in plan["links"]["airbnb"]
+    assert "group_adults=3" in plan["links"]["booking"]
+    assert update["message"] is None
+    json.dumps(plan)
 
 
 def test_find_stays_returns_closest_stays_as_plain_dicts(db_session, make_sector, make_stay):

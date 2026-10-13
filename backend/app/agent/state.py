@@ -6,17 +6,19 @@ the keys it leaves out keep their value.
 
 By default a new value replaces the old one. A reducer says "combine instead":
 `Annotated[list[int], operator.add]` appends to the list rather than
-overwriting it. None is needed yet; ticket 010 adds the first.
+overwriting it. `rejections` is the first one.
 
 The state must be plain data (ids, strings, numbers, lists, dicts) because the
-checkpointer (ticket 010) saves it between steps. Things that are not data,
-like the database session, travel in the runtime context (PlannerContext).
+checkpointer saves it between steps. Things that are not data, like the
+database session, travel in the runtime context (PlannerContext).
 """
 
+import operator
 from dataclasses import dataclass
 from datetime import date
-from typing import TypedDict
+from typing import Annotated, TypedDict
 
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.services.stays import next_saturday
@@ -45,8 +47,23 @@ class Candidate(TypedDict):
     distance_km: float
 
 
+class Rejection(TypedDict):
+    sector_id: int
+    reason: str
+
+
+class Approval(BaseModel):
+    """The group's answer, i.e. the resume value.
+
+    Validated by `interrupt(response_schema=Approval)` and never stored in the state.
+    """
+
+    approved: bool
+    reason: str | None = None
+
+
 class TripPlan(TypedDict):
-    # Written by propose_plan (ticket 010).
+    # Written by propose_plan.
     sector: Candidate
     checkin: str
     checkout: str
@@ -66,10 +83,15 @@ class TripState(TypedDict, total=False):
     filters: dict | None  # merge_preferences (asdict(SearchFilters)); None = no common ground
     conflicts: list[str]  # merge_preferences
     candidates: list[Candidate]  # search_sectors
-    chosen_sector: Candidate | None  # search_sectors (top result until ticket 010 adds pick_sector)
+    chosen_sector: Candidate | None  # pick_sector
+    # The first reducer, written by approve_sector. A node returns only the *new*
+    # rejection and operator.add appends it to the list instead of replacing it.
+    rejections: Annotated[list[Rejection], operator.add]
+    approved: bool | None  # approve_sector
     stays: list[dict]  # find_stays (NearbyStay dumped to JSON-safe dicts)
     plan: TripPlan | None  # propose_plan
-    # Why there's no plan, for the group: explain_conflicts (ticket 010: also pick_sector)
+    # Why there's no plan, for the group: explain_conflicts, search_sectors (no
+    # match), pick_sector (nothing left to propose) and propose_plan
     message: str | None
 
 
@@ -78,7 +100,7 @@ class PlannerContext:
     """Runtime context, given to every node as `runtime.context`.
 
     Never saved by the checkpointer, so it has to be passed again on every
-    `invoke` (including a resume in ticket 010).
+    `invoke`, including a resume.
     """
 
     db: Session
