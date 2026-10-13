@@ -4,10 +4,26 @@ They sit on the `db_session` fixture of backend/conftest.py, which empties the
 tables after each test.
 """
 
-import pytest
+from typing import NamedTuple
+from uuid import uuid4
 
+import pytest
+from langgraph.checkpoint.memory import InMemorySaver
+
+from app.agent.graph import build_trip_planner
+from app.agent.state import PlannerContext
 from app.models import ClimbingStyle, Crag, Group, Member, Sector, Stay
 from app.services.groups import generate_share_code
+
+# No distance limits: Far (Siurana, about 106 km out) must stay a candidate.
+AGREEING_MEMBERS = [
+    {"name": "Ana", "grade_min": "6a", "grade_max": "7a"},
+    {"name": "Marc", "grade_min": "6b", "grade_max": "7b"},
+]
+DISAGREEING_MEMBERS = [
+    {"name": "Ana", "grade_min": "5", "grade_max": "6a"},
+    {"name": "Marc", "grade_min": "7a", "grade_max": "8a"},
+]
 
 
 @pytest.fixture()
@@ -61,3 +77,39 @@ def make_stay(db_session):
         return stay
 
     return factory
+
+
+@pytest.fixture()
+def thread_config() -> dict:
+    """A new thread per test, so checkpoints can't leak between tests."""
+    return {"configurable": {"thread_id": str(uuid4())}}
+
+
+@pytest.fixture()
+def planner(db_session):
+    # A new saver every time: the checkpoints live in it.
+    return build_trip_planner(InMemorySaver()), PlannerContext(db=db_session)
+
+
+class AgreeingGroup(NamedTuple):
+    share_code: str
+    near_id: int
+    far_id: int
+
+
+@pytest.fixture()
+def agreeing_group(make_group, make_sector, make_stay) -> AgreeingGroup:
+    # Two matching sectors at different crags (Near is closer to Barcelona), a stay
+    # near each, and one sector nobody in the group can climb.
+    group = make_group(members=AGREEING_MEMBERS)
+    near = make_sector("Near", "6a", "7a")
+    far = make_sector("Far", "6a", "7a", lat=41.26, lon=0.93, crag="Siurana")
+    make_sector("Too hard", "8a", "9a")
+    make_stay("Close", 41.61, 1.82)
+    make_stay("Siurana camp", 41.27, 0.94)
+    return AgreeingGroup(group.share_code, near.id, far.id)
+
+
+@pytest.fixture()
+def disagreeing_group(make_group) -> str:
+    return make_group(members=DISAGREEING_MEMBERS).share_code

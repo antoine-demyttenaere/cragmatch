@@ -61,9 +61,12 @@ One build, one review, one commit for the whole ticket (no increments).
   - `planner(db_session)` fixture: returns `(build_trip_planner(InMemorySaver()), PlannerContext(db=db_session))`.
     A new saver every time.
   - `agreeing_group(make_group, make_sector, make_stay)` fixture: the group used by plan
-    010's `paused_run`. It has two members who agree (6a–7a / 6b–7b, 100 / 80 km), two
-    matching sectors at two crags (near: 37 km, far: 106 km), two stays near each, and one
-    sector out of range. It returns the share code and the two sector ids.
+    010's `paused_run`. It has two members who agree (6a–7a / 6b–7b) and **no distance
+    limits**, two matching sectors at two crags (near: 37 km, far: 106 km), a stay near
+    each, and one sector out of range. It returns the share code and the two sector ids.
+    (Corrected in review: an earlier version of this plan gave the members 100 / 80 km
+    limits, but then Far at 106 km is no strict match and the reject-then-approve tests
+    have no second sector. The old `paused_run` members had no limits either.)
   - `disagreeing_group(make_group)` fixture: members 5–6a and 7a–8a (the ticket 009 note).
 - `backend/tests/test_agent_graph.py`, `backend/tests/test_trip_planner_script.py`: existing
   tests use these fixtures instead of their own copies of the setup (the `paused_run`
@@ -124,7 +127,8 @@ collect 49.
 | 6 | Full `uv run pytest` run; `test_agent_package_imports_no_network_client` (this ticket) |
 
 If a test named here from 008–011 was renamed during delivery, the tech lead updates this
-table during review. It must not be left pointing at a missing name.
+table during review. It must not be left pointing at a missing name. (Checked in review:
+every name above exists.)
 
 ## Risks
 - *The fixture refactor quietly drops an assertion, hidden among the new tests in the same
