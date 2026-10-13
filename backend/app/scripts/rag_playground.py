@@ -4,7 +4,9 @@ Run a single step:
     uv run python -m app.scripts.rag_playground 6.2
     uv run python -m app.scripts.rag_playground 6.4
     uv run python -m app.scripts.rag_playground 6.5
+    uv run python -m app.scripts.rag_playground 6.8 [share_code]
 
+Steps from 6.8 on build the LangGraph trip planner and can take an argument.
 Steps 6.3 and 6.6 compared Stage 3 with LangChain and were removed in ticket
 014; the other numbers are kept so they match the plans in tickets/.
 
@@ -13,10 +15,13 @@ allows 3 per minute.
 """
 
 import sys
+from pprint import pprint
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langgraph.graph import END, START, StateGraph
 
+from app.agent.state import PlannerContext, TripState, initial_state
 from app.core.database import SessionLocal
 from app.rag.chain import RAG_PROMPT, build_rag_chain, format_docs
 from app.rag.llm import get_chat_model
@@ -109,12 +114,29 @@ def step_6_5(query: str = "quiet crag with a short approach, good for a beginner
     print(chain_answer)
 
 
-STEPS = {"6.2": step_6_2, "6.4": step_6_4, "6.5": step_6_5}
+def step_6_8(share_code: str = "9JS3VA3C"):
+    """A graph with no nodes (START -> END): the state comes out as it went in. No network."""
+    builder = StateGraph(TripState, context_schema=PlannerContext)
+    builder.add_edge(START, END)
+    graph = builder.compile()
+
+    state = initial_state(share_code)
+    with SessionLocal() as db:
+        result = graph.invoke(state, context=PlannerContext(db=db))
+
+    print("\n=== Step 6.8: initial state ===")
+    pprint(state)
+    print("\n=== Step 6.8: state after the graph ===")
+    pprint(result)
+    print("\nSame dict: no node ran, so nothing changed.")
+
+
+STEPS = {"6.2": step_6_2, "6.4": step_6_4, "6.5": step_6_5, "6.8": step_6_8}
 
 
 if __name__ == "__main__":
     step = sys.argv[1] if len(sys.argv) > 1 else None
     if step not in STEPS:
-        print(f"Usage: python -m app.scripts.rag_playground <step>   (steps: {', '.join(STEPS)})")
+        print(f"Usage: python -m app.scripts.rag_playground <step> [args]   (steps: {', '.join(STEPS)})")
         sys.exit(1)
-    STEPS[step]()
+    STEPS[step](*sys.argv[2:])

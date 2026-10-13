@@ -14,6 +14,7 @@ dependencies = [
     "langchain-postgres>=0.0.18",
     "langchain-text-splitters>=1.1.2",
     "langchain-voyageai>=0.4.1",
+    "langgraph>=1.2.15",
     "pgvector>=0.3.6,<0.4",
     "psycopg[binary]>=3.3.5",
     "pydantic-settings>=2.15.0",
