@@ -121,6 +121,7 @@ backend/
       rag_playground.py  Stage 6 steps 6.2, 6.4, 6.5, then the trip planner steps from 6.8 on (6.9a to 6.9c add the nodes, 6.10 the routed graph),
                          one function per step; a step can take an argument (`... 6.8 SHARECODE`).
       seed.py            Sample Catalan crags/sectors.
+      trip_planner.py    Run the Stage 6 trip planner on a group in the terminal (trace, approval, final plan).
       seed_notes.py      Illustrative approach notes per sector (run before indexing).
       seed_stays.py      Small hand-picked list of stays (illustrative).
       import_stays.py    Stays around every crag from OpenStreetMap.
