@@ -5,6 +5,7 @@ Run a single step:
     uv run python -m app.scripts.rag_playground 6.4
     uv run python -m app.scripts.rag_playground 6.5
     uv run python -m app.scripts.rag_playground 6.8 [share_code]
+    uv run python -m app.scripts.rag_playground 6.9a [share_code]   (also 6.9b, 6.9c)
 
 Steps from 6.8 on build the LangGraph trip planner and can take an argument.
 Steps 6.3 and 6.6 compared Stage 3 with LangChain and were removed in ticket
@@ -16,11 +17,13 @@ allows 3 per minute.
 
 import sys
 from pprint import pprint
+from typing import Callable
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.graph import END, START, StateGraph
 
+from app.agent.nodes import find_stays, merge_group_preferences, search_sectors
 from app.agent.state import PlannerContext, TripState, initial_state
 from app.core.database import SessionLocal
 from app.rag.chain import RAG_PROMPT, build_rag_chain, format_docs
@@ -131,7 +134,71 @@ def step_6_8(share_code: str = "9JS3VA3C"):
     print("\nSame dict: no node ran, so nothing changed.")
 
 
-STEPS = {"6.2": step_6_2, "6.4": step_6_4, "6.5": step_6_5, "6.8": step_6_8}
+def _run_line(share_code: str, *nodes: tuple[str, Callable]) -> dict:
+    """Run the given nodes one after the other (START -> n1 -> n2 -> ... -> END)."""
+    builder = StateGraph(TripState, context_schema=PlannerContext)
+    previous = START
+    for name, node in nodes:
+        builder.add_node(name, node)
+        builder.add_edge(previous, name)
+        previous = name
+    builder.add_edge(previous, END)
+    graph = builder.compile()
+
+    with SessionLocal() as db:
+        return graph.invoke(initial_state(share_code), context=PlannerContext(db=db))
+
+
+MERGE = ("merge_preferences", merge_group_preferences)
+SEARCH = ("search_sectors", search_sectors)
+STAYS = ("find_stays", find_stays)
+
+
+def _candidate_line(c: dict) -> str:
+    return f"{c['sector_name']} ({c['crag_name']}, {c['distance_km']} km)"
+
+
+def _stay_line(s: dict) -> str:
+    return f"{s['stay']['name']} ({s['stay']['type']}, {s['distance_km']} km)"
+
+
+def _print_state(title: str, state: dict) -> None:
+    """Pprint the state with candidates and stays shortened to one line each."""
+    shown = dict(state)
+    if "candidates" in shown:
+        shown["candidates"] = [_candidate_line(c) for c in shown["candidates"]]
+    if shown.get("chosen_sector"):
+        shown["chosen_sector"] = _candidate_line(shown["chosen_sector"])
+    if "stays" in shown:
+        shown["stays"] = [_stay_line(s) for s in shown["stays"]]
+    print(f"\n=== {title} ===")
+    pprint(shown)
+
+
+def step_6_9a(share_code: str = "9JS3VA3C"):
+    """One node: merge_preferences. No network."""
+    _print_state("Step 6.9a: after merge_preferences", _run_line(share_code, MERGE))
+
+
+def step_6_9b(share_code: str = "9JS3VA3C"):
+    """Two nodes: merge, then search. Nothing from step 6.9a is lost. No network."""
+    _print_state("Step 6.9b: after search_sectors", _run_line(share_code, MERGE, SEARCH))
+
+
+def step_6_9c(share_code: str = "9JS3VA3C"):
+    """Three nodes: merge, search, then find_stays. No network."""
+    _print_state("Step 6.9c: after find_stays", _run_line(share_code, MERGE, SEARCH, STAYS))
+
+
+STEPS = {
+    "6.2": step_6_2,
+    "6.4": step_6_4,
+    "6.5": step_6_5,
+    "6.8": step_6_8,
+    "6.9a": step_6_9a,
+    "6.9b": step_6_9b,
+    "6.9c": step_6_9c,
+}
 
 
 if __name__ == "__main__":

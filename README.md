@@ -92,7 +92,7 @@ backend/
       natural_search.py  /search/natural logic: Claude's filters (parse chain), then find_matching_sectors().
       similar_search.py  /search/similar logic: PGVector scores, sectors in rank order, reasons chain.
       embedding.py       EMBED_MODEL (voyage-3.5), used by app/rag/vectorstore.py.
-      groups.py          generate_share_code() (secrets, readable alphabet).
+      groups.py          find_group() (by share code), generate_share_code() (secrets, readable alphabet).
       group_matching.py  PURE (no DB): merge_preferences() for strict mode,
                          score_sectors() for scored mode.
       group_search.py    Group search: fetches sectors, calls the pure logic.
@@ -113,10 +113,11 @@ backend/
 
     agent/               Stage 6 LangGraph trip planner.
       state.py           TripState (what flows through the trip planner), PlannerContext (db session), initial_state()
+      nodes.py           One function per trip-planner step; each calls an existing service.
 
     scripts/             Run by hand, not part of the API.
       index_sectors_langchain.py  Index sectors into the LangChain PGVector store.
-      rag_playground.py  Stage 6 steps 6.2, 6.4, 6.5, then the trip planner steps from 6.8 on,
+      rag_playground.py  Stage 6 steps 6.2, 6.4, 6.5, then the trip planner steps from 6.8 on (6.9a to 6.9c add the nodes),
                          one function per step; a step can take an argument (`... 6.8 SHARECODE`).
       seed.py            Sample Catalan crags/sectors.
       seed_notes.py      Illustrative approach notes per sector (run before indexing).
@@ -125,6 +126,7 @@ backend/
 
   tests/                 pytest. External services (Claude, Voyage, Overpass)
                          are always mocked, so tests never use the network.
+    conftest.py          Factories for groups, sectors and stays (trip planner tests).
   conftest.py            Isolated cragmatch_test database, a fresh session per
                          test, TestClient with get_db overridden, limiter off.
   alembic/               Migrations (alembic upgrade head applies them).
