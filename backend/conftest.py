@@ -1,13 +1,16 @@
 import pytest
 from fastapi.testclient import TestClient
+from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
+from app.agent.graph import build_trip_planner
 from app.core.config import settings
 from app.core.database import Base
 from app.core.dependencies import get_db
 from app.core.rate_limit import limiter
 from app.main import app
+from app.routers.planner import get_trip_planner
 
 # Same connection, different database name — swap "cragmatch" for
 # "cragmatch_test" in the URL your app already builds.
@@ -58,6 +61,10 @@ def client(db_session):
     def override_get_db():
         yield db_session
 
+    # A new in-memory planner per test: no API test can open a Postgres saver.
+    graph = build_trip_planner(InMemorySaver())
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_trip_planner] = lambda: graph
     yield TestClient(app)
     app.dependency_overrides.clear()

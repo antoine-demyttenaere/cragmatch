@@ -7,6 +7,9 @@ proposed sector (y/n, and why not on a no), then prints the final plan or the
 reason there is none.
 
 The paused run lives in memory only (InMemorySaver): Ctrl+C at the prompt loses it.
+The API (routers/planner.py) keeps its runs in Postgres; this script does not,
+since a terminal run is not a group's saved run. Both step the graph with
+services.trip_planner.advance().
 """
 
 import argparse
@@ -22,6 +25,7 @@ from sqlalchemy.orm import Session
 from app.agent.graph import build_trip_planner
 from app.agent.state import Approval, PlannerContext, initial_state
 from app.core.database import SessionLocal
+from app.services.trip_planner import APPROVAL_NODE, advance
 
 
 def describe_update(node: str, update: dict | None) -> str:
@@ -47,17 +51,15 @@ def run_planner(
     next_input = initial_state(share_code, checkin, nights, guests)
 
     while True:
-        question = None
-        for chunk in graph.stream(next_input, config, context=context, stream_mode="updates"):
-            for node, update in chunk.items():
-                if node == "__interrupt__":
-                    question = update[0].value
-                elif node != "approve_sector":
-                    # approve_sector's own update is skipped: the decision line below
-                    # reports it, with the reason.
-                    out(describe_update(node, update))
-        if question is None:
+        for step in advance(graph, next_input, config, context):
+            if step["node"] != APPROVAL_NODE:
+                # approve_sector's own step is skipped: the decision line below
+                # reports it, with the reason.
+                out(describe_update(step["node"], dict.fromkeys(step["changed"])))
+        pending = graph.get_state(config)
+        if pending.next != (APPROVAL_NODE,):
             break
+        question = pending.tasks[0].interrupts[0].value
 
         decision = ask(question)
         verdict = "approved" if decision.approved else f"rejected: {decision.reason or ''}"

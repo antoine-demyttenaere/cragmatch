@@ -4,7 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
-from app.routers import crags, groups, search, sectors
+from app.routers import crags, groups, planner, search, sectors
 
 import logging
 
@@ -45,6 +45,7 @@ app.include_router(crags.router, prefix="/crags", tags=["crags"])
 app.include_router(sectors.router, prefix="/sectors", tags=["sectors"])
 app.include_router(search.router, prefix="/search", tags=["search"])
 app.include_router(groups.router, prefix="/groups", tags=["groups"])
+app.include_router(planner.router, tags=["planner"])
 
 
 @app.get("/")
