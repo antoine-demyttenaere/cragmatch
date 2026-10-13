@@ -38,7 +38,7 @@
         ]
       }
     ],
-        "SubagentStop": [
+    "SubagentStop": [
       {
         "matcher": "developer",
         "hooks": [
