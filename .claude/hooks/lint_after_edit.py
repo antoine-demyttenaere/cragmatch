@@ -13,7 +13,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]  # .claude/hooks/ -> repo root
 BACKEND = ROOT / "backend"
-FRONTEND = ROOT / "frontend"
+# Each app has its own node_modules and ESLint config. Ticket 017 removes frontend/.
+FRONTEND_APPS = [ROOT / "web", ROOT / "frontend"]
 MARKER = ROOT / ".claude" / ".backend-edited"
 
 
@@ -30,11 +31,13 @@ def lint(path: Path) -> subprocess.CompletedProcess | None:
         MARKER.touch()
         # --no-sync: never let a hook install packages (OneDrive locks, and slow)
         return run(["uv", "run", "--no-sync", "ruff", "check", "--output-format", "concise", str(path)], BACKEND)
-    if path.suffix in (".ts", ".tsx") and path.is_relative_to(FRONTEND / "src"):
-        # Call ESLint through node directly: npx is a .cmd file on Windows,
-        # which subprocess can't start without a shell.
-        eslint = FRONTEND / "node_modules" / "eslint" / "bin" / "eslint.js"
-        return run(["node", str(eslint), str(path)], FRONTEND)
+    if path.suffix in (".ts", ".tsx"):
+        for app in FRONTEND_APPS:
+            if path.is_relative_to(app / "src"):
+                # Call ESLint through node directly: npx is a .cmd file on Windows,
+                # which subprocess can't start without a shell.
+                eslint = app / "node_modules" / "eslint" / "bin" / "eslint.js"
+                return run(["node", str(eslint), str(path)], app)
     return None
 
 

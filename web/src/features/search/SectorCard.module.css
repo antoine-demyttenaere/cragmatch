@@ -1,0 +1,45 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  height: 100%;
+}
+
+.top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.name {
+  font-size: var(--step-1);
+}
+
+.place,
+.walk {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--step--1);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.reason {
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--highlight);
+  font-style: italic;
+}
+
+.card > button {
+  margin-top: auto;
+}
