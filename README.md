@@ -27,17 +27,21 @@ uv run python -m app.scripts.index_sectors_langchain   # LangChain PGVector inde
 uv run python -m app.scripts.seed_stays       # hand-picked stays (run before the import)
 uv run python -m app.scripts.import_stays     # campsites/hostels/huts from OpenStreetMap
 ```
+The trip planner API needs `alembic upgrade head` for the `planner_runs` table. LangGraph's
+own checkpoint tables are created by the library on the first planner request, not by Alembic.
+
 `import_stays` calls the free public Overpass API, which is often busy. If a
 crag fails, just run it again later: finished crags come from the cache in
 `backend/.cache/overpass/` (kept a week; `--no-cache` forces fresh data).
 
 ### 3. Frontend
 ```
-cd frontend
+cd web
 npm install                    # first time only
 npm run dev
 ```
-Runs at http://localhost:5173.
+Runs at http://localhost:5173. The old app in `frontend/` still runs the same
+way, but not at the same time: the backend's CORS only allows port 5173.
 
 ### Running tests
 ```
@@ -67,6 +71,7 @@ backend/
       member.py          Member of a group, with optional preferences
                          (grade range, max distance, max walk-in minutes, styles; empty = any).
       stay.py            Stay (campsite/hostel/refuge/...), StayType, StaySource.
+      planner_run.py     PlannerRun: one trip planner run of a group (id = LangGraph thread id, creation time, node trace).
       __init__.py        Re-exports every model so all tables register on Base.
 
     schemas/             Pydantic request/response shapes, decoupled from models.
@@ -75,6 +80,7 @@ backend/
       group.py           Members (with grade validators), groups, and the
                          group search response (fits / misfits per sector).
       stay.py            Stays, nearby stays, booking links.
+      planner.py         Trip planner runs: start body, run status/proposal/plan/trace, graph structure.
 
     routers/             HTTP endpoints only; logic lives in services/.
       crags.py           /crags: list, get, create.
@@ -83,6 +89,8 @@ backend/
                          both rate-limited.
       groups.py          /groups: create, read, add/replace/remove members,
                          /groups/{code}/search, and group-aware stays.
+      planner.py         Trip planner over HTTP: /groups/{code}/planner/runs (start, latest, read, answer)
+                         and /planner/graph; get_trip_planner builds the graph on a Postgres checkpointer.
 
     services/            Plain logic with no HTTP in it, reusable anywhere.
       grades.py          GRADE_ORDER, grade_rank(), ranges_overlap().
@@ -100,6 +108,8 @@ backend/
                          Airbnb / Booking.com prefilled search links.
       overpass.py        OpenStreetMap: query, fetch (timeout, retries,
                          fallback server, cache), parse, duplicate detection.
+      trip_planner.py    Trip planner run logic shared by the router and the script: advance(), start_run(),
+                         answer_run(), run_view(), graph_structure().
 
     rag/                 Stage 6 LangChain code.
       loader.py          SectorLoader + build_text(): sectors as LangChain Documents.
@@ -115,6 +125,7 @@ backend/
       state.py           TripState (what flows through the trip planner), PlannerContext (db session), initial_state()
       nodes.py           One function per trip-planner step; each calls an existing service.
       graph.py           build_trip_planner(): nodes, edges, the "no common ground" branch; pauses at approve_sector (interrupt + InMemorySaver).
+      checkpointer.py    open_postgres_saver(): PostgresSaver on a connection pool (paused runs survive a restart), psycopg_conninfo().
 
     scripts/             Run by hand, not part of the API.
       index_sectors_langchain.py  Index sectors into the LangChain PGVector store.
@@ -135,7 +146,19 @@ backend/
 
 postgres.Dockerfile      Postgres image = postgis/postgis + pgvector.
 
-frontend/src/
+web/src/                 The new app (design system, search, stays).
+  main.tsx               Entry point: font, tokens and base styles, then App.
+  styles/                tokens.css (colours, type, spacing; light and dark) and base.css.
+  api/                   client.ts (apiRequest, ApiError) and types.ts (mirrors the backend schemas).
+  constants.ts           Grades (same order as the backend), styles, stay types, labels.
+  components/            UI kit, each with a CSS Module: Button, Field, Chip, Card,
+                         SegmentedControl, StateMessage, Sheet, Icon.
+  app/                   App shell: header, navigation, light/dark layout.
+  features/search/       Search page with three modes (filters, describe it, vibe), sector cards.
+  features/stays/        Stays panel for one sector.
+  features/group/        Placeholder until the group screens move over (ticket 017).
+
+frontend/src/            The old app, removed in ticket 017.
   main.tsx               Entry point.
   App.tsx                Two tabs, "Find crags" and "Group trip"; keeps
                          ?group=CODE in the URL so the link can be shared.

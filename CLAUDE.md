@@ -12,10 +12,11 @@ Full file tree and run instructions: `README.md`.
   `app/services/llm.py`), Voyage `voyage-3.5` embeddings, 1024 dims, through
   LangChain (`app/rag/vectorstore.py`; model name in `app/services/embedding.py`).
   Stage 6 LangChain/LangGraph code lives in `app/rag/`.
-- Frontend: React 19 + TypeScript + Vite.
+- Frontend: React 19 + TypeScript + Vite in `web/` (new). `frontend/` is the
+  old app until ticket 017.
 
 ## Commands
-Backend commands run from `backend/`, frontend commands from `frontend/`.
+Backend commands run from `backend/`, frontend commands from `web/`.
 - `docker compose up -d` (repo root): start the database
 - `uv run fastapi dev app/main.py`: API on :8000, docs at /docs
 - `uv run pytest`: all tests; must stay green before any commit
@@ -23,8 +24,8 @@ Backend commands run from `backend/`, frontend commands from `frontend/`.
 - `uv run alembic revision --autogenerate -m "..."` then `uv run alembic upgrade head`
 - Fresh DB: seed scripts in README "Running locally" (order matters;
   `seed_notes` must run before `index_sectors_langchain`, which makes 1 Voyage request)
-- `npm run dev`: frontend on :5173
-- `npm run lint`: ESLint, must pass for frontend changes
+- `npm run dev`: frontend on :5173 (stop the old `frontend/` dev server first)
+- `npm run lint` and `npm run build`: must pass for frontend changes
 
 ## Architecture rules
 - Routers are HTTP only: validate input, call a service, turn errors into
@@ -51,10 +52,14 @@ Backend commands run from `backend/`, frontend commands from `frontend/`.
 - Embeddings and vector search: `get_embeddings()` / `get_vector_store()` in
   `rag/vectorstore.py`, `EMBED_MODEL` in `services/embedding.py`.
 - Sector text: `SectorLoader` / `build_text()` in `rag/loader.py`.
+- Trip planner runs: `advance()` / `start_run()` / `answer_run()` / `run_view()` in
+  `services/trip_planner.py`, `get_trip_planner` in `routers/planner.py`.
 - FastAPI dependencies: `get_db` (`core/dependencies.py`), `get_group` /
   `get_member` (`routers/groups.py`), `load_sector` (`routers/sectors.py`).
-- Frontend: `apiRequest()` and `errorMessage()` in `api.ts`; grades/styles in
-  `constants.ts`; `types.ts` mirrors the backend schemas (update both together).
+- Frontend (`web/src/`): `apiRequest()` / `ApiError` in `api/client.ts`; the UI
+  kit in `components/`; design tokens in `styles/tokens.css` (never hardcode a
+  colour); grades/styles in `constants.ts`; `api/types.ts` mirrors the backend
+  schemas (update both together).
 - Grades: `GRADE_ORDER`, `grade_rank()` (raises ValueError for an unknown
   grade), `ranges_overlap()` in `services/grades.py`. Never compare grade
   strings directly ("6a" < "6a+").
@@ -92,6 +97,9 @@ Backend commands run from `backend/`, frontend commands from `frontend/`.
 - Sector vectors live only in LangChain's tables (`langchain_pg_*`, collection
   `sectors`); the `sectors` table has no vector column. After changing the notes
   or `build_text()`, re-run `seed_notes` / `index_sectors_langchain`.
+- The trip planner's checkpoint tables come from `PostgresSaver.setup()` (first planner
+  request), not Alembic. `setup()` builds indexes CONCURRENTLY and waits for every open
+  transaction, so a test or endpoint must not hold a db session open while it runs.
 - The user's terminal is Windows PowerShell 5.1: it mangles double quotes inside
   arguments to git. Commit messages must not contain `"`.
 
