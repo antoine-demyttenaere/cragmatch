@@ -1,0 +1,45 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.examples {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.examplesLabel {
+  color: var(--text-muted);
+  font-size: var(--step--1);
+}
+
+.badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  background: var(--highlight-soft);
+  color: var(--highlight);
+  border-radius: var(--radius-pill);
+  font-size: var(--step--1);
+  font-weight: 700;
+}
+
+.submit {
+  align-self: flex-start;
+}

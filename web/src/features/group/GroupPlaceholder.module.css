@@ -1,0 +1,23 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) 0;
+  text-align: center;
+}
+
+.icon {
+  color: var(--accent);
+}
+
+.code {
+  padding: var(--space-1) var(--space-3);
+  background: var(--accent-soft);
+  border-radius: var(--radius-pill);
+}
+
+.text {
+  max-width: 32rem;
+  color: var(--text-muted);
+}

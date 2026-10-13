@@ -1,0 +1,49 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--step--1);
+  font-weight: 600;
+}
+
+/* Styles for the controls rendered inside a Field. */
+.field :is(input:not([type="range"]), select, textarea) {
+  width: 100%;
+  min-height: var(--target);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 6rem;
+}
+
+.field input[type="range"] {
+  width: 100%;
+  min-height: var(--target);
+  accent-color: var(--accent);
+}
+
+.field [aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.hint,
+.error {
+  font-size: var(--step--1);
+}
+
+.hint {
+  color: var(--text-muted);
+}
+
+.error {
+  color: var(--danger);
+}
