@@ -244,7 +244,10 @@ def test_parse_chain_logs_token_usage(caplog):
 
 def test_playground_offers_only_the_langchain_steps():
     # The usage message is built from STEPS, so this pins what 6.3 and 6.6 get told.
-    assert list(rag_playground.STEPS) == ["6.2", "6.4", "6.5"]
+    # Later tickets add steps, so check the subset and the removed ones.
+    assert "6.3" not in rag_playground.STEPS
+    assert "6.6" not in rag_playground.STEPS
+    assert {"6.2", "6.4", "6.5"} <= set(rag_playground.STEPS)
 
 
 def test_get_parse_chain_is_built_once(monkeypatch, clean_parse_cache):

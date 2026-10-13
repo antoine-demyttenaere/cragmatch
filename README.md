@@ -111,9 +111,13 @@ backend/
       reasons.py         Per-sector match reasons: prompt, MatchReasons, build_reasons_chain(), get_reasons_chain().
       query_parsing.py   Natural-language query to ParsedFilters: parse prompt, build_parse_chain(), get_parse_chain().
 
+    agent/               Stage 6 LangGraph trip planner.
+      state.py           TripState (what flows through the trip planner), PlannerContext (db session), initial_state()
+
     scripts/             Run by hand, not part of the API.
       index_sectors_langchain.py  Index sectors into the LangChain PGVector store.
-      rag_playground.py  Stage 6 steps 6.2, 6.4, 6.5, one function per step.
+      rag_playground.py  Stage 6 steps 6.2, 6.4, 6.5, then the trip planner steps from 6.8 on,
+                         one function per step; a step can take an argument (`... 6.8 SHARECODE`).
       seed.py            Sample Catalan crags/sectors.
       seed_notes.py      Illustrative approach notes per sector (run before indexing).
       seed_stays.py      Small hand-picked list of stays (illustrative).
