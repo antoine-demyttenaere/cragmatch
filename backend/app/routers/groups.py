@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
 from app.models import Group, Member, Sector, StayType
@@ -16,7 +16,7 @@ from app.schemas.group import (
 from app.schemas.stay import BookingLinks, GroupStaysResponse, NearbyStay
 from app.services.group_matching import FitMode
 from app.services.group_search import SearchMode, search_for_group
-from app.services.groups import generate_share_code
+from app.services.groups import find_group, generate_share_code
 from app.services.stays import airbnb_url, booking_url, find_stays_near, next_saturday
 
 router = APIRouter()
@@ -28,12 +28,7 @@ def get_group(code: str, db: Session = Depends(get_db)) -> Group:
     Any endpoint that declares `group: Group = Depends(get_group)` gets the
     loaded group, and never runs at all if the code doesn't exist.
     """
-    group = (
-        db.query(Group)
-        .options(selectinload(Group.members))
-        .filter(Group.share_code == code.upper())
-        .first()
-    )
+    group = find_group(db, code)
     if group is None:
         raise HTTPException(status_code=404, detail="Group not found")
     return group
