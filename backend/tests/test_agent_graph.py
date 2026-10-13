@@ -1,15 +1,20 @@
 import copy
 import json
 from datetime import date
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
 from app.agent import nodes
-from app.agent.graph import build_trip_planner, route_after_merge
+from app.agent.graph import (
+    build_trip_planner,
+    route_after_approval,
+    route_after_merge,
+    route_after_pick,
+)
 from app.agent.nodes import (
     find_stays,
     merge_group_preferences,
@@ -108,16 +113,6 @@ def test_route_after_merge_does_not_change_the_state():
     assert state == before
 
 
-AGREEING = [
-    {"name": "Ana", "grade_min": "6a", "grade_max": "7a"},
-    {"name": "Marc", "grade_min": "6b", "grade_max": "7b"},
-]
-DISAGREEING = [
-    {"name": "Ana", "grade_min": "5", "grade_max": "6a"},
-    {"name": "Marc", "grade_min": "7a", "grade_max": "8a"},
-]
-
-
 def node_names(graph, db, share_code):
     updates = graph.stream(
         initial_state(share_code), context=PlannerContext(db=db), stream_mode="updates"
@@ -125,13 +120,12 @@ def node_names(graph, db, share_code):
     return [name for update in updates for name in update]
 
 
-def test_graph_with_common_ground_runs_merge_search_stays(db_session, make_group, make_sector, make_stay):
-    group = make_group(members=AGREEING)
-    make_sector("Near", "6a", "7a")
-    make_stay("Close", 41.61, 1.82)
-    graph = build_trip_planner(InMemorySaver())
-    config = {"configurable": {"thread_id": str(uuid4())}}
-    context = PlannerContext(db=db_session)
+def test_graph_with_common_ground_runs_merge_search_stays(
+    db_session, agreeing_group, planner, thread_config
+):
+    group = agreeing_group
+    graph, context = planner
+    config = thread_config
 
     # The first stream stops at the pause; the resume carries approve_sector's update.
     first = graph.stream(
@@ -160,9 +154,9 @@ def test_graph_with_common_ground_runs_merge_search_stays(db_session, make_group
 
 
 def test_graph_without_common_ground_skips_search_and_stays(
-    db_session, make_group, make_sector, make_stay, monkeypatch
+    db_session, disagreeing_group, make_sector, make_stay, monkeypatch
 ):
-    group = make_group(members=DISAGREEING)
+    group = SimpleNamespace(share_code=disagreeing_group)
     make_sector("Near", "6a", "7a")
     make_stay("Close", 41.61, 1.82)
     calls = []
@@ -209,19 +203,13 @@ def call_counts(monkeypatch):
 
 
 @pytest.fixture()
-def paused_run(db_session, make_group, make_sector, make_stay, call_counts):
-    # Two matching sectors at different crags (Near is closer to Barcelona), a stay near each.
-    group = make_group(members=AGREEING)
-    make_sector("Near", "6a", "7a")
-    make_sector("Far", "6a", "7a", lat=41.26, lon=0.93, crag="Siurana")
-    make_stay("Close", 41.61, 1.82)
-    make_stay("Siurana camp", 41.27, 0.94)
-    graph = build_trip_planner(InMemorySaver())
-    config = {"configurable": {"thread_id": str(uuid4())}}
-    context = PlannerContext(db=db_session)
+def paused_run(agreeing_group, planner, thread_config, call_counts):
+    graph, context = planner
 
-    first_output = graph.invoke(initial_state(group.share_code), config, context=context)
-    return graph, config, context, first_output
+    first_output = graph.invoke(
+        initial_state(agreeing_group.share_code), thread_config, context=context
+    )
+    return graph, thread_config, context, first_output
 
 
 def proposed_sector(output) -> dict:
@@ -277,3 +265,77 @@ def test_reject_proposes_the_next_sector(paused_run):
     values = graph.get_state(config).values
     assert values["rejections"] == [{"sector_id": first["sector_id"], "reason": "too far"}]
     assert "stays" not in values
+
+
+def test_route_after_pick_asks_for_approval_when_a_sector_is_chosen():
+    assert route_after_pick({"chosen_sector": {"sector_id": 1}}) == "approve_sector"
+
+
+def test_route_after_pick_ends_when_nothing_is_chosen():
+    assert route_after_pick({"chosen_sector": None}) == END
+
+
+def test_route_after_approval_goes_to_stays_or_back_to_pick():
+    assert route_after_approval({"approved": True}) == "find_stays"
+    assert route_after_approval({"approved": False}) == "pick_sector"
+
+
+@pytest.fixture()
+def stay_lookups(monkeypatch):
+    # Records where stays were looked up, then calls the real function.
+    points = []
+    real_find_stays_near = nodes.find_stays_near
+
+    def spy(db, latitude, longitude, *args, **kwargs):
+        points.append((latitude, longitude))
+        return real_find_stays_near(db, latitude, longitude, *args, **kwargs)
+
+    monkeypatch.setattr("app.agent.nodes.find_stays_near", spy)
+    return points
+
+
+def reject(graph, config, context, reason="no"):
+    return graph.invoke(
+        Command(resume={"approved": False, "reason": reason}), config, context=context
+    )
+
+
+def test_rejected_sector_never_gets_a_stay_lookup(paused_run, stay_lookups):
+    graph, config, context, _ = paused_run
+
+    reject(graph, config, context)
+    graph.invoke(Command(resume={"approved": True}), config, context=context)
+
+    # Only the Siurana crag (the far sector) was looked up, never Montserrat.
+    assert stay_lookups == [(41.26, 0.93)]
+
+
+def test_three_rejections_end_without_a_plan(
+    db_session, agreeing_group, make_sector, planner, thread_config, stay_lookups
+):
+    make_sector("Third", "6a", "7a")
+    make_sector("Fourth", "6a", "7a")
+    graph, context = planner
+    output = graph.invoke(initial_state(agreeing_group.share_code), thread_config, context=context)
+
+    for _ in range(3):
+        assert "__interrupt__" in output
+        output = reject(graph, thread_config, context)
+
+    assert "__interrupt__" not in output
+    assert "plan" not in output
+    assert "turned down 3 sectors" in output["message"]
+    assert stay_lookups == []
+
+
+def test_threads_do_not_share_checkpoints(agreeing_group, planner, thread_config):
+    graph, context = planner
+    other_config = {"configurable": {"thread_id": str(uuid4())}}
+    for config in (thread_config, other_config):
+        graph.invoke(initial_state(agreeing_group.share_code), config, context=context)
+
+    reject(graph, thread_config, context)
+
+    other = graph.get_state(other_config).values
+    assert other["chosen_sector"]["sector_id"] == agreeing_group.near_id
+    assert other["rejections"] == []

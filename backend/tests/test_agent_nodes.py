@@ -1,4 +1,6 @@
+import ast
 import json
+from pathlib import Path
 
 import pytest
 from langgraph.runtime import Runtime
@@ -282,3 +284,29 @@ def test_explain_conflicts_joins_the_conflicts_into_a_message():
         "message": "No common ground, so no search: "
         "No grade everyone climbs: Ana vs Marc. Second problem."
     }
+
+
+def test_agent_package_imports_no_network_client():
+    """The planner must stay offline; a Claude step would need its own mocked tests first.
+
+    Since ticket 014 the clients live in app.rag; the two app.services model-name
+    modules stay on the list because a node that needs a model name is about to
+    call a model.
+    """
+    forbidden = (
+        "anthropic", "voyageai", "httpx", "langchain_anthropic", "langchain_voyageai",
+        "app.rag", "app.services.llm", "app.services.embedding", "app.services.overpass",
+    )
+    imported = []
+    for path in Path(nodes.__file__).parent.glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Import):
+                imported += [(path.name, alias.name) for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported.append((path.name, node.module))
+
+    offenders = [
+        (file, module) for file, module in imported
+        if any(module == bad or module.startswith(bad + ".") for bad in forbidden)
+    ]
+    assert offenders == []

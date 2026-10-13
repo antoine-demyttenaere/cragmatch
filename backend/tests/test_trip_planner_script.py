@@ -1,21 +1,7 @@
+from types import SimpleNamespace
+
 from app.agent.state import Approval
 from app.scripts.trip_planner import describe_update, format_plan, run_planner
-
-AGREEING = [
-    {"name": "Ana", "grade_min": "6a", "grade_max": "7a"},
-    {"name": "Marc", "grade_min": "6b", "grade_max": "7b"},
-]
-DISAGREEING = [
-    {"name": "Ana", "grade_min": "5", "grade_max": "6a"},
-    {"name": "Marc", "grade_min": "7a", "grade_max": "8a"},
-]
-
-
-def two_sectors(make_sector, make_stay):
-    make_sector("Near", "6a", "7a")
-    make_sector("Far", "6a", "7a", lat=41.26, lon=0.93, crag="Siurana")
-    make_stay("Close", 41.61, 1.82)
-    make_stay("Siurana camp", 41.27, 0.94)
 
 
 def test_describe_update_lists_the_changed_fields():
@@ -29,9 +15,8 @@ def test_describe_update_without_changes():
     assert describe_update("find_stays", None) == "find_stays: (no change)"
 
 
-def test_run_planner_approves_and_returns_a_plan(db_session, make_group, make_sector, make_stay):
-    group = make_group(members=AGREEING)
-    two_sectors(make_sector, make_stay)
+def test_run_planner_approves_and_returns_a_plan(db_session, agreeing_group):
+    group = agreeing_group
     questions = []
     lines = []
 
@@ -55,11 +40,8 @@ def test_run_planner_approves_and_returns_a_plan(db_session, make_group, make_se
     assert all(line.startswith(prefix) for line, prefix in zip(lines, prefixes))
 
 
-def test_run_planner_reject_then_approve_uses_the_second_sector(
-    db_session, make_group, make_sector, make_stay
-):
-    group = make_group(members=AGREEING)
-    two_sectors(make_sector, make_stay)
+def test_run_planner_reject_then_approve_uses_the_second_sector(db_session, agreeing_group):
+    group = agreeing_group
     answers = iter([Approval(approved=False, reason="too close"), Approval(approved=True)])
 
     state = run_planner(
@@ -69,8 +51,8 @@ def test_run_planner_reject_then_approve_uses_the_second_sector(
     assert state["plan"]["sector"]["sector_name"] == "Far"
 
 
-def test_run_planner_without_common_ground_never_asks(db_session, make_group):
-    group = make_group(members=DISAGREEING)
+def test_run_planner_without_common_ground_never_asks(db_session, disagreeing_group):
+    group = SimpleNamespace(share_code=disagreeing_group)
     lines = []
 
     def ask(question):
