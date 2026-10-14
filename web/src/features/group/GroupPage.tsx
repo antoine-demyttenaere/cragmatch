@@ -5,6 +5,7 @@ import type { Group } from "../../api/types";
 import Button from "../../components/Button";
 import Chip from "../../components/Chip";
 import StateMessage from "../../components/StateMessage";
+import PlannerSection from "../planner/PlannerSection";
 import GroupSearch from "./GroupSearch";
 import GroupStart from "./GroupStart";
 import styles from "./GroupPage.module.css";
@@ -124,6 +125,8 @@ function GroupPage({ initialCode }: { initialCode: string | null }) {
       <ShareLink code={group.share_code} />
       <MemberList groupCode={group.share_code} members={group.members} onChanged={() => refresh(group.share_code)} />
       <GroupSearch group={group} />
+      {/* Keyed by code, not the group object: a member change re-reads the group and must not reset the planner. */}
+      <PlannerSection key={group.share_code} shareCode={group.share_code} memberCount={group.members.length} />
     </div>
   );
 }

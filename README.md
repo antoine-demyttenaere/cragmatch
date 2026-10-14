@@ -97,7 +97,7 @@ backend/
       group.py           Members (with grade validators), groups, and the
                          group search response (fits / misfits per sector).
       stay.py            Stays, nearby stays, booking links.
-      planner.py         Trip planner runs: start body, run status/proposal/plan/trace, graph structure.
+      planner.py         Trip planner runs: start body, answer body (names the proposal it answers), run status/proposal/plan/trace, graph structure.
 
     routers/             HTTP endpoints only; logic lives in services/.
       crags.py           /crags: list, get, create.
@@ -106,7 +106,7 @@ backend/
                          both rate-limited.
       groups.py          /groups: create, read, add/replace/remove members,
                          /groups/{code}/search, and group-aware stays.
-      planner.py         Trip planner over HTTP: /groups/{code}/planner/runs (start, latest, read, answer)
+      planner.py         Trip planner over HTTP: /groups/{code}/planner/runs (start, latest, read, answer; a stale answer gets 409)
                          and /planner/graph; get_trip_planner builds the graph on a Postgres checkpointer.
 
     services/            Plain logic with no HTTP in it, reusable anywhere.
@@ -141,7 +141,7 @@ backend/
     agent/               Stage 6 LangGraph trip planner.
       state.py           TripState (what flows through the trip planner), PlannerContext (db session), initial_state()
       nodes.py           One function per trip-planner step; each calls an existing service.
-      graph.py           build_trip_planner(): nodes, edges, the "no common ground" branch; pauses at approve_sector (interrupt + InMemorySaver).
+      graph.py           build_trip_planner(): nodes, edges, the "no common ground" branch; pauses at approve_sector (interrupt; the checkpointer is passed in: PostgresSaver in the app, InMemorySaver in tests).
       checkpointer.py    open_postgres_saver(): PostgresSaver on a connection pool (paused runs survive a restart), psycopg_conninfo().
 
     scripts/             Run by hand, not part of the API.
@@ -163,7 +163,7 @@ backend/
 
 postgres.Dockerfile      Postgres image = postgis/postgis + pgvector.
 
-web/src/                 The app (design system, search, groups, stays).
+web/src/                 The app (design system, search, groups, stays, trip planner).
   main.tsx               Entry point: font, tokens and base styles, then App.
   styles/                tokens.css (colours, type, spacing; light and dark) and base.css.
   api/                   client.ts (apiRequest, ApiError) and types.ts (mirrors the backend schemas).
@@ -171,11 +171,17 @@ web/src/                 The app (design system, search, groups, stays).
   components/            UI kit, each with a CSS Module: Button, Field, Chip, Card,
                          SegmentedControl, StateMessage, Sheet, Icon.
   app/                   App shell: header, navigation, light/dark layout.
-  features/search/       Search page with three modes (filters, describe it, vibe), sector cards.
+  features/search/       Search page with three modes (filters, describe it, vibe), sector cards,
+                         sectorLabels.ts (walk-in and distance strings).
   features/stays/        Stays panel for one sector; in a group, dates, guests and
-                         Airbnb / Booking.com links.
+                         Airbnb / Booking.com links; shared TripFields, StayList,
+                         TripLinks (also used by the planner).
   features/group/        Group trip: create, join or reopen a group, share link,
                          members, scored and strict group search.
+  features/planner/      Plan the trip on the group page: start a run with dates, nights
+                         and guests, the proposed sector with approve or not this one, the
+                         plan with stays and booking links, the no-plan outcomes; resumes
+                         the group's latest run.
 ```
 
 ## Where the stay data comes from

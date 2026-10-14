@@ -59,7 +59,9 @@ Backend commands run from `backend/`, frontend commands from `web/`.
   kit in `components/`; design tokens in `styles/tokens.css` (never hardcode a
   colour); grades/styles in `constants.ts`; `api/types.ts` mirrors the backend
   schemas (update both together); share links and `?group=` in
-  `features/group/groupLink.ts`.
+  `features/group/groupLink.ts`; stays pieces `TripFields` / `StayList` /
+  `TripLinks` in `features/stays/`; `walkInLabel()` / `distanceLabel()` in
+  `features/search/sectorLabels.ts`.
 - Grades: `GRADE_ORDER`, `grade_rank()` (raises ValueError for an unknown
   grade), `ranges_overlap()` in `services/grades.py`. Never compare grade
   strings directly ("6a" < "6a+").

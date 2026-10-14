@@ -1,0 +1,13 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.title {
+  font-size: var(--step-1);
+}
+
+.intro {
+  color: var(--text-muted);
+}

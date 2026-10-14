@@ -7,12 +7,16 @@ from sqlalchemy.orm import Session
 
 from app.agent.checkpointer import open_postgres_saver, psycopg_conninfo
 from app.agent.graph import build_trip_planner
-from app.agent.state import Approval
 from app.core.config import settings
 from app.core.dependencies import get_db
 from app.models import Group, PlannerRun
 from app.routers.groups import get_group
-from app.schemas.planner import PlannerGraphRead, PlannerRunRead, PlannerRunStart
+from app.schemas.planner import (
+    PlannerAnswer,
+    PlannerGraphRead,
+    PlannerRunRead,
+    PlannerRunStart,
+)
 from app.services import trip_planner
 
 # No prefix: the routes span /groups/{code}/planner and /planner, so each one
@@ -93,9 +97,13 @@ def read_run(
     "/groups/{code}/planner/runs/{run_id}/answer",
     response_model=PlannerRunRead,
     summary="Approve or reject the proposed sector",
+    description=(
+        "Name the proposal with sector_id: if someone already answered it, the answer "
+        "gets 409 and changes nothing."
+    ),
 )
 def answer_planner_run(
-    body: Approval,
+    body: PlannerAnswer,
     graph: CompiledStateGraph = Depends(get_trip_planner),
     run: PlannerRun = Depends(get_run),
     db: Session = Depends(get_db),
@@ -103,7 +111,7 @@ def answer_planner_run(
     try:
         run = trip_planner.answer_run(db, graph, run, body)
     except trip_planner.RunNotWaiting:
-        raise HTTPException(status_code=409, detail="This run is not waiting for an answer")
+        raise HTTPException(status_code=409, detail="This proposal is no longer waiting for an answer")
     return trip_planner.run_view(graph, run)
 
 

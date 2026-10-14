@@ -7,6 +7,7 @@ import Chip from "../../components/Chip";
 import Icon from "../../components/Icon";
 import { styleLabel } from "../../constants";
 import styles from "./SectorCard.module.css";
+import { distanceLabel, walkInLabel } from "./sectorLabels";
 
 interface SectorCardProps {
   sector: Sector;
@@ -21,8 +22,6 @@ interface SectorCardProps {
 }
 
 function SectorCard({ sector, similarity, reason, distanceKm, children, onShowStays }: SectorCardProps) {
-  const walkIn = sector.approach_minutes !== null ? `${sector.approach_minutes} min walk-in` : "Walk-in unknown";
-
   return (
     <Card as="li">
       <div className={styles.card}>
@@ -42,8 +41,8 @@ function SectorCard({ sector, similarity, reason, distanceKm, children, onShowSt
         </div>
 
         <p className={styles.walk}>
-          <Icon name="clock" size={16} /> {walkIn}
-          {distanceKm !== undefined && <> · {Math.round(distanceKm)} km from Barcelona</>}
+          <Icon name="clock" size={16} /> {walkInLabel(sector.approach_minutes)}
+          {distanceKm !== undefined && <> · {distanceLabel(distanceKm)}</>}
         </p>
 
         {reason && <blockquote className={styles.reason}>{reason}</blockquote>}
