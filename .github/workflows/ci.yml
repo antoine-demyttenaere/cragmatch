@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# The workflow only reads the code. Later deploy jobs ask for their own permissions.
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # All values are dummies, none is a real secret. CRAGMATCH_POSTGRES_DB is the dev database
+    # name and is deliberately never created here: a test that reaches the dev database instead of
+    # cragmatch_test fails loudly instead of passing.
+    env:
+      CRAGMATCH_POSTGRES_USER: cragmatch
+      CRAGMATCH_POSTGRES_PASSWORD: ci-only-not-a-secret
+      CRAGMATCH_POSTGRES_DB: cragmatch
+      # 127.0.0.1 and not localhost, so libpq never tries IPv6 first.
+      CRAGMATCH_POSTGRES_HOST: 127.0.0.1
+      CRAGMATCH_POSTGRES_PORT: "5433"
+      CRAGMATCH_ANTHROPIC_API_KEY: ci-dummy-not-a-key
+      CRAGMATCH_VOYAGE_API_KEY: ci-dummy-not-a-key
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the database image
+        run: docker build -f postgres.Dockerfile -t cragmatch-db .
+
+      - name: Start the database
+        # The image's entrypoint creates POSTGRES_DB, which conftest.py expects to exist.
+        run: |
+          docker run -d --name db -p 5433:5432 \
+            -e POSTGRES_USER="$CRAGMATCH_POSTGRES_USER" \
+            -e POSTGRES_PASSWORD="$CRAGMATCH_POSTGRES_PASSWORD" \
+            -e POSTGRES_DB=cragmatch_test \
+            cragmatch-db
+
+      - name: Wait for the database
+        # -h 127.0.0.1: during first-start init the image runs a temporary server on the Unix
+        # socket only, so a socket check can say "ready" too early. TCP only answers once
+        # init is done.
+        run: |
+          timeout 60 bash -c 'until docker exec db pg_isready -h 127.0.0.1 -U "$CRAGMATCH_POSTGRES_USER" -d cragmatch_test; do sleep 1; done'
+
+      - name: Check the extensions
+        # Fails here with a clear message if the image is broken, not deep inside pytest.
+        run: |
+          docker exec db psql -U "$CRAGMATCH_POSTGRES_USER" -d cragmatch_test -v ON_ERROR_STOP=1 \
+            -c 'CREATE EXTENSION IF NOT EXISTS postgis; CREATE EXTENSION IF NOT EXISTS vector;'
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --locked
+
+      - name: Run pytest
+        working-directory: backend
+        # httpx (Anthropic SDK, LangChain, fetch_overpass) and requests (Voyage) honour the
+        # proxy variables, so any unmocked outbound call fails at once. This matters for
+        # Overpass, which needs no key. Postgres is unaffected (libpq ignores HTTP proxies)
+        # and TestClient uses an in-process transport. UV_OFFLINE: the sync step already
+        # installed everything, so uv run must not need the network either.
+        env:
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+          NO_PROXY: localhost,127.0.0.1
+          UV_OFFLINE: "1"
+        run: uv run pytest
+
+  ruff:
+    name: Ruff
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --locked
+
+      - name: Run ruff
+        working-directory: backend
+        run: uv run ruff check .
+
+  eslint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: "web: npm ci"
+        working-directory: web
+        run: npm ci
+
+      # Keep this the last step: ticket 020 adds "web: npm test" right after it.
+      - name: "web: npm run lint"
+        working-directory: web
+        run: npm run lint
