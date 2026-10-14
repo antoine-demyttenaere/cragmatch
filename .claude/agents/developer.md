@@ -18,8 +18,7 @@ include the tech lead's review findings.
 2. Make the changes listed under "Files", reusing what "Reuses" names.
 3. Write the tests listed under "Tests", with the names the plan gives.
 4. Run the checks in backend/: `uv run pytest -q` and `uv run ruff check .`.
-   For frontend changes, run `npm run lint` (and `npm run build`) in the
-   frontend app you changed (`web/` or `frontend/`).
+   For frontend changes, run `npm run lint` (and `npm run build`) in `web/`.
 5. If the plan is wrong or unclear (a file or function doesn't exist, a
    step contradicts the code), stop and report it. Don't improvise a
    different design: that's the tech lead's call.

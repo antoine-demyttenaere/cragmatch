@@ -5,31 +5,53 @@ export const API_URL = "http://localhost:8000";
 // 429, 503 from the AI searches) as a notice instead of an error.
 export class ApiError extends Error {
   status: number;
+  // The request field a validation error is about ("max_distance_km"), or
+  // null when it is about the whole request.
+  field: string | null;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, field: string | null = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.field = field;
   }
 }
 
 
+interface ErrorDetails {
+  message: string;
+  field: string | null;
+}
+
+// FastAPI's `loc` is ["body", "max_distance_km"] or ["query", "mode"]; a
+// model-level error has just ["body"]. Only a real field name is useful.
+function fieldFromLoc(loc: unknown): string | null {
+  if (!Array.isArray(loc) || loc.length === 0) return null;
+  const last = loc[loc.length - 1];
+  if (typeof last !== "string" || last === "body" || last === "query") return null;
+  return last;
+}
+
 // Turn a failed response into a readable message. The backend's errors come
 // in three shapes:
 //   - our own HTTPExceptions:        {"detail": "some message"}
-//   - FastAPI request validation:    {"detail": [{"msg": "...", ...}, ...]}
+//   - FastAPI request validation:    {"detail": [{"msg": "...", "loc": [...]}, ...]}
 //   - slowapi's rate limit (429):    {"error": "Rate limit exceeded: 10 per 1 minute"}
-export async function errorMessage(response: Response): Promise<string> {
-  if (response.status === 429) return "Too many searches. Try again in a minute.";
+export async function errorDetails(response: Response): Promise<ErrorDetails> {
+  if (response.status === 429) return { message: "Too many searches. Try again in a minute.", field: null };
   try {
     const body = await response.json();
-    if (typeof body.detail === "string") return body.detail;
-    if (Array.isArray(body.detail) && body.detail[0]?.msg) return body.detail[0].msg;
-    if (typeof body.error === "string") return body.error;
+    if (typeof body.detail === "string") return { message: body.detail, field: null };
+    if (Array.isArray(body.detail) && body.detail[0]?.msg) {
+      // Pydantic puts "Value error, " in front of our own validators' messages.
+      const message = String(body.detail[0].msg).replace(/^Value error, /, "");
+      return { message, field: fieldFromLoc(body.detail[0].loc) };
+    }
+    if (typeof body.error === "string") return { message: body.error, field: null };
   } catch {
     // The body wasn't JSON (e.g. a plain-text 500): fall through.
   }
-  return `Request failed (HTTP ${response.status})`;
+  return { message: `Request failed (HTTP ${response.status})`, field: null };
 }
 
 
@@ -47,7 +69,8 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     throw new Error("Can't reach the CragMatch server. Is the backend running?");
   }
   if (!response.ok) {
-    throw new ApiError(response.status, await errorMessage(response));
+    const { message, field } = await errorDetails(response);
+    throw new ApiError(response.status, message, field);
   }
   // 204 No Content (e.g. DELETE) has no body to parse.
   return response.status === 204 ? (undefined as T) : response.json();

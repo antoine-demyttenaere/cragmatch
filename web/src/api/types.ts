@@ -41,6 +41,61 @@ export interface SimilarSearchResponse {
   results: SimilarMatch[];
 }
 
+// schemas/group.py
+export type SearchMode = "scored" | "strict";
+export type FitMode = "overlap" | "cover";
+
+export interface MemberInput {
+  name: string;
+  grade_min: string | null;
+  grade_max: string | null;
+  max_distance_km: number | null;
+  max_approach_minutes: number | null;
+  styles: string[];
+}
+
+export interface Member extends MemberInput {
+  id: number;
+}
+
+export interface Group {
+  name: string;
+  share_code: string;
+  members: Member[];
+}
+
+export interface MemberMisfit {
+  name: string;
+  reason: string;
+}
+
+export interface GroupSectorMatch {
+  sector: Sector;
+  distance_km: number;
+  fit_count: number;
+  member_count: number;
+  fits: string[];
+  misfits: MemberMisfit[];
+}
+
+export interface MergedFilters {
+  grade_min: string;
+  grade_max: string;
+  max_distance_km: number | null; // null = no limit
+  max_approach_minutes: number | null; // null = no limit
+  styles: string[] | null; // null = any style
+}
+
+export interface GroupSearchResponse {
+  mode: SearchMode;
+  fit: FitMode;
+  member_count: number;
+  common_ground: boolean;
+  message: string | null;
+  filters: MergedFilters | null;
+  results: GroupSectorMatch[];
+}
+
 // schemas/stay.py
 export interface StayRead {
   id: number;
@@ -56,4 +111,20 @@ export interface StayRead {
 export interface NearbyStay {
   stay: StayRead;
   distance_km: number;
+}
+
+export interface BookingLinks {
+  airbnb: string;
+  booking: string;
+}
+
+export interface GroupStaysResponse {
+  sector_id: number;
+  sector_name: string;
+  crag_name: string;
+  guests: number;
+  checkin: string; // "YYYY-MM-DD"
+  checkout: string; // "YYYY-MM-DD"
+  stays: NearbyStay[];
+  links: BookingLinks;
 }

@@ -40,8 +40,7 @@ cd web
 npm install                    # first time only
 npm run dev
 ```
-Runs at http://localhost:5173. The old app in `frontend/` still runs the same
-way, but not at the same time: the backend's CORS only allows port 5173.
+Runs at http://localhost:5173.
 
 ### Running tests
 ```
@@ -146,7 +145,7 @@ backend/
 
 postgres.Dockerfile      Postgres image = postgis/postgis + pgvector.
 
-web/src/                 The new app (design system, search, stays).
+web/src/                 The app (design system, search, groups, stays).
   main.tsx               Entry point: font, tokens and base styles, then App.
   styles/                tokens.css (colours, type, spacing; light and dark) and base.css.
   api/                   client.ts (apiRequest, ApiError) and types.ts (mirrors the backend schemas).
@@ -155,23 +154,10 @@ web/src/                 The new app (design system, search, stays).
                          SegmentedControl, StateMessage, Sheet, Icon.
   app/                   App shell: header, navigation, light/dark layout.
   features/search/       Search page with three modes (filters, describe it, vibe), sector cards.
-  features/stays/        Stays panel for one sector.
-  features/group/        Placeholder until the group screens move over (ticket 017).
-
-frontend/src/            The old app, removed in ticket 017.
-  main.tsx               Entry point.
-  App.tsx                Two tabs, "Find crags" and "Group trip"; keeps
-                         ?group=CODE in the URL so the link can be shared.
-  SearchPage.tsx         Filter search, natural-language search, vibe search.
-  GroupPage.tsx          Create/join a group, members, strict/scored search
-                         showing who each sector fits and why not.
-  MemberForm.tsx         Add or edit a member's preferences.
-  StaysPanel.tsx         Stays near a sector; in a group, dates/guests and
+  features/stays/        Stays panel for one sector; in a group, dates, guests and
                          Airbnb / Booking.com links.
-  SectorCard.tsx         One sector in a result list.
-  api.ts                 apiRequest() + readable error messages.
-  constants.ts           Grades (same order as the backend), styles, stay types.
-  types.ts               TypeScript mirrors of the backend's schemas.
+  features/group/        Group trip: create, join or reopen a group, share link,
+                         members, scored and strict group search.
 ```
 
 ## Where the stay data comes from

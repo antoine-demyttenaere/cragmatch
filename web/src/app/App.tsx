@@ -1,7 +1,8 @@
 import { useState } from "react";
 
 import Icon from "../components/Icon";
-import GroupPlaceholder from "../features/group/GroupPlaceholder";
+import GroupPage from "../features/group/GroupPage";
+import { groupCodeFromUrl } from "../features/group/groupLink";
 import SearchPage from "../features/search/SearchPage";
 import styles from "./App.module.css";
 
@@ -11,11 +12,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "search", label: "Find crags" },
   { id: "group", label: "Group trip" },
 ];
-
-// A shared invite link looks like http://localhost:5173/?group=ABCD2345
-function groupCodeFromUrl(): string | null {
-  return new URLSearchParams(window.location.search).get("group");
-}
 
 function App() {
   // Read the URL once, on first render only.
@@ -49,7 +45,7 @@ function App() {
           doesn't throw away a half-filled form or the last results. */}
       <main className={`${styles.inner} ${styles.main}`}>
         <div hidden={tab !== "search"}><SearchPage /></div>
-        <div hidden={tab !== "group"}><GroupPlaceholder code={groupCode} /></div>
+        <div hidden={tab !== "group"}><GroupPage initialCode={groupCode} /></div>
       </main>
     </div>
   );

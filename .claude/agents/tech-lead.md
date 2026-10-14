@@ -37,8 +37,7 @@ The task message names the plan file and the increment number.
    - Tests: are the planned tests there, and do they assert behaviour
      rather than just running the code?
 3. Run the checks: in backend/, `uv run pytest -q` and `uv run ruff check .`;
-   for frontend changes, `npm run lint` (and `npm run build`) in the
-   frontend app that changed (`web/` or `frontend/`).
+   for frontend changes, `npm run lint` (and `npm run build`) in `web/`.
 4. Verdict: APPROVE, or CHANGES REQUESTED with a numbered list of
    file:line, the problem, and the fix. Only real problems; no style
    preferences that CLAUDE.md doesn't state.
