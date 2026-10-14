@@ -128,3 +128,64 @@ export interface GroupStaysResponse {
   stays: NearbyStay[];
   links: BookingLinks;
 }
+
+// schemas/planner.py
+export interface PlannerSector {
+  sector_id: number;
+  sector_name: string;
+  crag_name: string;
+  style: string;
+  grade_min: string;
+  grade_max: string;
+  approach_minutes: number | null;
+  distance_km: number;
+}
+
+export interface PlannerPlan {
+  sector: PlannerSector;
+  checkin: string; // "YYYY-MM-DD"
+  checkout: string; // "YYYY-MM-DD"
+  nights: number;
+  guests: number;
+  stays: NearbyStay[];
+  links: BookingLinks;
+}
+
+export interface TraceStep {
+  node: string;
+  changed: string[];
+}
+
+export interface Rejection {
+  sector_id: number;
+  reason: string;
+}
+
+export type PlannerRunStatus = "waiting_for_approval" | "planned" | "no_plan";
+
+export interface PlannerRun {
+  run_id: string;
+  share_code: string;
+  status: PlannerRunStatus;
+  checkin: string; // "YYYY-MM-DD"
+  nights: number;
+  guests: number | null;
+  proposal: PlannerSector | null;
+  plan: PlannerPlan | null;
+  message: string | null;
+  rejections: Rejection[];
+  trace: TraceStep[];
+  created_at: string;
+}
+
+export interface PlannerRunStart {
+  checkin?: string; // left out = next Saturday
+  nights: number;
+  guests?: number; // left out = one per member
+}
+
+export interface PlannerAnswer {
+  approved: boolean;
+  reason?: string | null;
+  sector_id?: number; // the proposal being answered
+}

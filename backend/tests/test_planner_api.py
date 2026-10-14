@@ -224,6 +224,51 @@ def test_answering_a_finished_run_is_409(client, agreeing_group):
     assert again.status_code == 409
 
 
+def test_answer_for_a_sector_no_longer_proposed_is_409(client, agreeing_group):
+    code = agreeing_group.share_code
+    near_id = agreeing_group.near_id
+    run = start(client, code).json()
+    moved = answer(client, code, run["run_id"], {**reject("too far"), "sector_id": near_id})
+    assert moved.json()["proposal"]["sector_name"] == "Far"
+
+    late_approve = answer(client, code, run["run_id"], {**APPROVE, "sector_id": near_id})
+    late_reject = answer(client, code, run["run_id"], {**reject("no"), "sector_id": near_id})
+
+    assert late_approve.status_code == 409
+    assert late_reject.status_code == 409
+    current = client.get(f"/groups/{code}/planner/runs/{run['run_id']}").json()
+    assert current["status"] == "waiting_for_approval"
+    assert current["proposal"]["sector_name"] == "Far"
+    assert current["rejections"] == [{"sector_id": near_id, "reason": "too far"}]
+
+
+def test_answer_naming_the_proposed_sector_goes_through(client, agreeing_group):
+    code = agreeing_group.share_code
+    run = start(client, code).json()
+
+    response = answer(
+        client, code, run["run_id"], {**APPROVE, "sector_id": agreeing_group.near_id}
+    )
+
+    assert response.status_code == 200
+    done = response.json()
+    assert done["status"] == "planned"
+    assert done["plan"]["sector"]["sector_id"] == agreeing_group.near_id
+
+
+def test_docs_example_answer_goes_through(client, agreeing_group):
+    schema = client.get("/openapi.json").json()["components"]["schemas"]["PlannerAnswer"]
+    example = schema["examples"][0]
+    assert "sector_id" not in example
+    code = agreeing_group.share_code
+    run = start(client, code).json()
+
+    response = answer(client, code, run["run_id"], example)
+
+    assert response.status_code == 200
+    assert response.json()["proposal"]["sector_name"] == "Far"
+
+
 @pytest.mark.parametrize(
     "body",
     [

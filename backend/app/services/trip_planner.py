@@ -8,13 +8,14 @@ from datetime import date
 from uuid import UUID
 
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.types import Command
+from langgraph.types import Command, StateSnapshot
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.agent.state import Approval, PlannerContext, initial_state
+from app.agent.state import PlannerContext, initial_state
 from app.models import Group, PlannerRun
 from app.schemas.planner import (
+    PlannerAnswer,
     PlannerEdge,
     PlannerGraphRead,
     PlannerRunRead,
@@ -28,7 +29,8 @@ INTERRUPT_KEY = "__interrupt__"
 
 
 class RunNotWaiting(Exception):
-    """The run is not paused at the approval step: it finished, or was answered first."""
+    """The run is not waiting for this answer: it finished, or someone answered first
+    (the proposal being answered is no longer the one waiting)."""
 
 
 def thread_config(run: PlannerRun) -> dict:
@@ -61,18 +63,29 @@ def start_run(
     return run
 
 
+def _waits_for(snapshot: StateSnapshot, sector_id: int | None) -> bool:
+    """Is the run paused at the approval step, on this sector (any sector if None)?"""
+    if snapshot.next != (APPROVAL_NODE,):
+        return False
+    if sector_id is None:
+        return True
+    return snapshot.values["chosen_sector"]["sector_id"] == sector_id
+
+
 def answer_run(
-    db: Session, graph: CompiledStateGraph, run: PlannerRun, approval: Approval
+    db: Session, graph: CompiledStateGraph, run: PlannerRun, answer: PlannerAnswer
 ) -> PlannerRun:
     # Lock the row: two friends answering at once are served one after the other,
-    # and the second finds the run no longer waiting.
+    # and the second finds the run no longer waiting for its sector.
     db.refresh(run, with_for_update=True)
     config = thread_config(run)
-    if graph.get_state(config).next != (APPROVAL_NODE,):
+    if not _waits_for(graph.get_state(config), answer.sector_id):
         db.rollback()
         raise RunNotWaiting()
 
-    steps = advance(graph, Command(resume=approval.model_dump()), config, PlannerContext(db=db))
+    # The resume value stays exactly an Approval: sector_id only guards the call.
+    resume = answer.model_dump(exclude={"sector_id"})
+    steps = advance(graph, Command(resume=resume), config, PlannerContext(db=db))
     # A new list, so SQLAlchemy sees the JSONB column change.
     run.trace = [*run.trace, *steps]
     db.commit()

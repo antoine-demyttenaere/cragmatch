@@ -62,7 +62,7 @@ function MemberList({ groupCode, members, onChanged }: MemberListProps) {
 
   return (
     <Card as="section">
-      <div className={styles.section}>
+      <div id="members" className={styles.section}>
         <h2 className={styles.title}>Members ({members.length})</h2>
 
         {members.length === 0 && <p className={styles.empty}>No one has joined yet. Add everyone's preferences below.</p>}

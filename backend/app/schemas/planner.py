@@ -2,8 +2,9 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.agent.state import Approval
 from app.schemas.stay import BookingLinks, NearbyStay
 
 
@@ -51,6 +52,22 @@ class PlannerRunStart(BaseModel):
         if value is not None and value < date.today():
             raise ValueError("checkin can't be in the past")
         return value
+
+
+class PlannerAnswer(Approval):
+    # Friends answer *a* proposal; without the id a late answer would apply to the next one.
+    sector_id: int | None = Field(
+        default=None,
+        description=(
+            "The proposal being answered. If the run has moved on to another sector, "
+            "the answer is refused with 409."
+        ),
+    )
+
+    # Without an example, /docs fills in sector_id: 0 and "Try it out" gets a 409.
+    model_config = ConfigDict(
+        json_schema_extra={"examples": [{"approved": False, "reason": "too far"}]}
+    )
 
 
 class PlannerRunRead(BaseModel):

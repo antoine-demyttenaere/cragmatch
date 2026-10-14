@@ -2,28 +2,21 @@ import { useEffect, useState } from "react";
 
 import { apiRequest } from "../../api/client";
 import type { GroupStaysResponse, NearbyStay, Sector } from "../../api/types";
-import Chip, { ChipButton } from "../../components/Chip";
+import { ChipButton } from "../../components/Chip";
 import Field from "../../components/Field";
-import Icon from "../../components/Icon";
 import Sheet from "../../components/Sheet";
 import StateMessage from "../../components/StateMessage";
 import { STAY_TYPES, stayTypeLabel } from "../../constants";
+import StayList from "./StayList";
 import styles from "./StaysPanel.module.css";
+import TripFields from "./TripFields";
+import TripLinks from "./TripLinks";
 
 interface StaysPanelProps {
   sector: Sector;
   // Set for a group's sector: adds dates, guests and Airbnb / Booking.com links.
   groupCode?: string;
   onClose: () => void;
-}
-
-// "2026-10-17" -> "Sat 17 Oct". Built from the parts so the browser's time
-// zone can't shift the day.
-function formatDay(isoDate: string): string {
-  const [year, month, day] = isoDate.split("-").map(Number);
-  return new Date(year, month - 1, day)
-    .toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
-    .replace(",", "");
 }
 
 const DEFAULT_NIGHTS = 2; // the backend's default too
@@ -100,31 +93,15 @@ function StaysPanel({ sector, groupCode, onClose }: StaysPanelProps) {
     <Sheet title={`Stays near ${sector.name} (${sector.crag.name})`} onClose={onClose}>
       <div className={styles.filters}>
         {groupCode && (
-          <div className={styles.trip}>
-            <Field label="Check-in">
-              {(fieldProps) => (
-                <input {...fieldProps} type="date" value={checkin || trip?.checkin || ""} onChange={(e) => setCheckin(e.target.value)} />
-              )}
-            </Field>
-            <Field label="Nights">
-              {(fieldProps) => (
-                <input {...fieldProps} type="number" min={1} max={30} value={nightsText} onChange={(e) => setNightsText(e.target.value)} />
-              )}
-            </Field>
-            <Field label="Guests">
-              {(fieldProps) => (
-                <input
-                  {...fieldProps}
-                  type="number"
-                  min={1}
-                  max={30}
-                  placeholder={String(trip?.guests ?? "")}
-                  value={guestsText}
-                  onChange={(e) => setGuestsText(e.target.value)}
-                />
-              )}
-            </Field>
-          </div>
+          <TripFields
+            value={{ checkin: checkin || trip?.checkin || "", nights: nightsText, guests: guestsText }}
+            onChange={(patch) => {
+              if (patch.checkin !== undefined) setCheckin(patch.checkin);
+              if (patch.nights !== undefined) setNightsText(patch.nights);
+              if (patch.guests !== undefined) setGuestsText(patch.guests);
+            }}
+            guestsPlaceholder={String(trip?.guests ?? "")}
+          />
         )}
         <div role="group" aria-label="Stay type" className={styles.types}>
           <ChipButton selected={type === ""} onClick={() => setType("")}>Any</ChipButton>
@@ -147,19 +124,7 @@ function StaysPanel({ sector, groupCode, onClose }: StaysPanelProps) {
       </div>
 
       {!loading && !error && trip && (
-        <div className={styles.booking}>
-          <p>
-            {trip.guests} {trip.guests === 1 ? "guest" : "guests"}, {formatDay(trip.checkin)} to {formatDay(trip.checkout)}
-          </p>
-          <div className={styles.bookingLinks}>
-            <a href={trip.links.airbnb} target="_blank" rel="noopener noreferrer" className={styles.bookingLink}>
-              Search on Airbnb <Icon name="external" size={16} />
-            </a>
-            <a href={trip.links.booking} target="_blank" rel="noopener noreferrer" className={styles.bookingLink}>
-              Search on Booking.com <Icon name="external" size={16} />
-            </a>
-          </div>
-        </div>
+        <TripLinks checkin={trip.checkin} checkout={trip.checkout} guests={trip.guests} links={trip.links} />
       )}
 
       {loading && <StateMessage tone="loading" title="Loading stays" />}
@@ -169,28 +134,7 @@ function StaysPanel({ sector, groupCode, onClose }: StaysPanelProps) {
           No stays within {maxDistanceKm} km. Try a bigger radius.
         </StateMessage>
       )}
-      {!loading && !error && stays.length > 0 && (
-        <ul className={styles.list}>
-          {stays.map(({ stay, distance_km }) => (
-            <li key={stay.id} className={styles.stay}>
-              <span className={styles.icon}><Icon name="tent" size={22} /></span>
-              <div className={styles.info}>
-                <p className={styles.name}>{stay.name}</p>
-                <p className={styles.meta}>
-                  {stayTypeLabel(stay.type)} · {distance_km} km
-                  {stay.price_range && <> · {stay.price_range}</>}
-                </p>
-                {stay.source === "curated" && <Chip tone="grade">Hand-picked</Chip>}
-              </div>
-              {stay.url && (
-                <a href={stay.url} target="_blank" rel="noopener noreferrer" className={styles.link} aria-label={`${stay.name} website`}>
-                  <Icon name="external" />
-                </a>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      {!loading && !error && stays.length > 0 && <StayList stays={stays} />}
     </Sheet>
   );
 }
