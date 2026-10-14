@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { Sector } from "../../api/types";
 import Button from "../../components/Button";
 import Card from "../../components/Card";
@@ -11,10 +13,14 @@ interface SectorCardProps {
   // Only set for results of the "Vibe" search.
   similarity?: number;
   reason?: string | null;
+  // Only set for group results: straight-line distance from Barcelona.
+  distanceKm?: number;
+  // Extra details shown above the button (the group's fit summary).
+  children?: ReactNode;
   onShowStays: (sector: Sector) => void;
 }
 
-function SectorCard({ sector, similarity, reason, onShowStays }: SectorCardProps) {
+function SectorCard({ sector, similarity, reason, distanceKm, children, onShowStays }: SectorCardProps) {
   const walkIn = sector.approach_minutes !== null ? `${sector.approach_minutes} min walk-in` : "Walk-in unknown";
 
   return (
@@ -37,9 +43,12 @@ function SectorCard({ sector, similarity, reason, onShowStays }: SectorCardProps
 
         <p className={styles.walk}>
           <Icon name="clock" size={16} /> {walkIn}
+          {distanceKm !== undefined && <> · {Math.round(distanceKm)} km from Barcelona</>}
         </p>
 
         {reason && <blockquote className={styles.reason}>{reason}</blockquote>}
+
+        {children}
 
         <Button variant="secondary" onClick={() => onShowStays(sector)}>Stays nearby</Button>
       </div>

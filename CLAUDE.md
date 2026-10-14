@@ -12,8 +12,7 @@ Full file tree and run instructions: `README.md`.
   `app/services/llm.py`), Voyage `voyage-3.5` embeddings, 1024 dims, through
   LangChain (`app/rag/vectorstore.py`; model name in `app/services/embedding.py`).
   Stage 6 LangChain/LangGraph code lives in `app/rag/`.
-- Frontend: React 19 + TypeScript + Vite in `web/` (new). `frontend/` is the
-  old app until ticket 017.
+- Frontend: React 19 + TypeScript + Vite in `web/`.
 
 ## Commands
 Backend commands run from `backend/`, frontend commands from `web/`.
@@ -24,7 +23,7 @@ Backend commands run from `backend/`, frontend commands from `web/`.
 - `uv run alembic revision --autogenerate -m "..."` then `uv run alembic upgrade head`
 - Fresh DB: seed scripts in README "Running locally" (order matters;
   `seed_notes` must run before `index_sectors_langchain`, which makes 1 Voyage request)
-- `npm run dev`: frontend on :5173 (stop the old `frontend/` dev server first)
+- `npm run dev`: frontend on :5173
 - `npm run lint` and `npm run build`: must pass for frontend changes
 
 ## Architecture rules
@@ -59,7 +58,8 @@ Backend commands run from `backend/`, frontend commands from `web/`.
 - Frontend (`web/src/`): `apiRequest()` / `ApiError` in `api/client.ts`; the UI
   kit in `components/`; design tokens in `styles/tokens.css` (never hardcode a
   colour); grades/styles in `constants.ts`; `api/types.ts` mirrors the backend
-  schemas (update both together).
+  schemas (update both together); share links and `?group=` in
+  `features/group/groupLink.ts`.
 - Grades: `GRADE_ORDER`, `grade_rank()` (raises ValueError for an unknown
   grade), `ranges_overlap()` in `services/grades.py`. Never compare grade
   strings directly ("6a" < "6a+").
