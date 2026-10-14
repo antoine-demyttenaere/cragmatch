@@ -48,9 +48,27 @@ cd backend
 uv run pytest
 ```
 
+### Checks (same as CI)
+```
+cd backend
+uv run pytest
+uv run ruff check .
+
+cd ../web
+npm run lint
+```
+
+On every push and pull request, GitHub Actions runs three jobs: Backend tests, Ruff and
+ESLint. The tests run against the image built from `postgres.Dockerfile` with dummy settings
+and outbound HTTP blocked, so no real key is used or needed. Dependencies come from `uv.lock`
+and `package-lock.json`, so a stale lockfile fails the run. The checks are visible on GitHub
+but do not block merging.
+
 ## Project structure
 
 ```
+.github/workflows/ci.yml  CI on every push and pull request: backend tests, ruff,
+                         ESLint (web/).
 backend/
   app/
     main.py              FastAPI app: CORS, rate limiter, mounts the routers,
