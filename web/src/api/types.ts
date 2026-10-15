@@ -178,6 +178,17 @@ export interface PlannerRun {
   created_at: string;
 }
 
+export interface PlannerEdge {
+  source: string;
+  target: string;
+  conditional: boolean;
+}
+
+export interface PlannerGraph {
+  nodes: string[];
+  edges: PlannerEdge[];
+}
+
 export interface PlannerRunStart {
   checkin?: string; // left out = next Saturday
   nights: number;

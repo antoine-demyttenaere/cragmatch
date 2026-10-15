@@ -18,14 +18,15 @@ interface PlannerSectionProps {
 type View =
   | { state: "loading" }
   | { state: "start" }
-  | { state: "run"; run: PlannerRun; notice: string | null }
+  // animate: the trace plays only for a run started or answered in this tab.
+  | { state: "run"; run: PlannerRun; notice: string | null; animate: boolean }
   | { state: "error"; message: string };
 
 // Never throws: a failed load is just another view.
 async function loadLatest(runsPath: string): Promise<View> {
   try {
     const run = await apiRequest<PlannerRun | null>(`${runsPath}/latest`);
-    return run ? { state: "run", run, notice: null } : { state: "start" };
+    return run ? { state: "run", run, notice: null, animate: false } : { state: "start" };
   } catch (err) {
     return { state: "error", message: err instanceof Error ? err.message : "Something went wrong" };
   }
@@ -55,7 +56,7 @@ function PlannerSection({ shareCode, memberCount }: PlannerSectionProps) {
 
   async function start(body: PlannerRunStart) {
     const run = await apiRequest<PlannerRun>(runsPath, { method: "POST", body: JSON.stringify(body) });
-    setView({ state: "run", run, notice: null });
+    setView({ state: "run", run, notice: null, animate: true });
   }
 
   async function answer(run: PlannerRun, approved: boolean, reason: string | null) {
@@ -66,13 +67,13 @@ function PlannerSection({ shareCode, memberCount }: PlannerSectionProps) {
         method: "POST",
         body: JSON.stringify(body),
       });
-      setView({ state: "run", run: next, notice: null });
+      setView({ state: "run", run: next, notice: null, animate: true });
     } catch (err) {
       if (!(err instanceof ApiError && err.status === 409)) throw err;
       // A friend answered first: show where the run is now.
       try {
         const current = await apiRequest<PlannerRun>(`${runsPath}/${run.run_id}`);
-        setView({ state: "run", run: current, notice: "Someone already answered. This is where the run is now." });
+        setView({ state: "run", run: current, notice: "Someone already answered. This is where the run is now.", animate: false });
       } catch {
         throw new Error("Someone already answered, and the run couldn't be reloaded. Reload the page.");
       }
@@ -99,6 +100,7 @@ function PlannerSection({ shareCode, memberCount }: PlannerSectionProps) {
             key={view.run.run_id}
             run={view.run}
             notice={view.notice}
+            animate={view.animate}
             onAnswer={(approved, reason) => answer(view.run, approved, reason)}
             onPlanAgain={() => setView({ state: "start" })}
           />

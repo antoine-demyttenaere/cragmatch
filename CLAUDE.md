@@ -24,7 +24,8 @@ Backend commands run from `backend/`, frontend commands from `web/`.
 - Fresh DB: seed scripts in README "Running locally" (order matters;
   `seed_notes` must run before `index_sectors_langchain`, which makes 1 Voyage request)
 - `npm run dev`: frontend on :5173
-- `npm run lint` and `npm run build`: must pass for frontend changes
+- `npm run lint`, `npm test` and `npm run build`: must pass for frontend changes
+  (`npm test` runs Vitest once, no watch mode)
 
 ## Architecture rules
 - Routers are HTTP only: validate input, call a service, turn errors into
@@ -61,7 +62,10 @@ Backend commands run from `backend/`, frontend commands from `web/`.
   schemas (update both together); share links and `?group=` in
   `features/group/groupLink.ts`; stays pieces `TripFields` / `StayList` /
   `TripLinks` in `features/stays/`; `walkInLabel()` / `distanceLabel()` in
-  `features/search/sectorLabels.ts`.
+  `features/search/sectorLabels.ts`; planner diagram helpers `layoutGraph()` /
+  `edgePath()` (`graphLayout.ts`), `runPath()` / `firstNewStep()` (`runPath.ts`),
+  `describeSteps()` / `stopLabel()` (`plannerText.ts`), node names and labels
+  (`plannerNodes.ts`), test data in `planner.fixtures.ts`, all in `features/planner/`.
 - Grades: `GRADE_ORDER`, `grade_rank()` (raises ValueError for an unknown
   grade), `ranges_overlap()` in `services/grades.py`. Never compare grade
   strings directly ("6a" < "6a+").
@@ -83,6 +87,8 @@ Backend commands run from `backend/`, frontend commands from `web/`.
   (monkeypatch where the router/service *uses* the function).
 - New logic needs tests: pure functions get unit tests, endpoints get
   TestClient tests (happy path + main error cases).
+- Frontend: pure `.ts` helpers in `web/src/` get a `*.test.ts` next to them
+  (Vitest, node environment, no DOM, no network); components are checked by hand.
 
 ## Traps
 - Tests build their schema with `create_all()`, not migrations, so green tests
@@ -95,6 +101,8 @@ Backend commands run from `backend/`, frontend commands from `web/`.
   (locked files cause "Access is denied").
 - Stop a process only by its exact, verified PID, never by matching
   command-line text (that has killed the Vite server before).
+- `APPROVAL_NODE` is mirrored in `web/src/features/planner/plannerNodes.ts` (the paused
+  node is not in the trace); rename both together.
 - `pgvector` is pinned `<0.4` because `langchain-postgres` requires it.
 - Sector vectors live only in LangChain's tables (`langchain_pg_*`, collection
   `sectors`); the `sectors` table has no vector column. After changing the notes
@@ -120,7 +128,7 @@ stops if it edited backend Python), and keep
 the product-owner and tech-lead writing only in `tickets/`.
 
 ## Definition of done
-1. Tests pass (`uv run pytest`) and lint passes for frontend changes.
+1. Tests pass (`uv run pytest`) and `npm run lint` and `npm test` pass for frontend changes.
 2. Model changes come with a reviewed migration.
 3. New files or folders are added to the structure in `README.md`.
 4. Commit messages say what changed and why, one step per commit.

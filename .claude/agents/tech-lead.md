@@ -37,13 +37,13 @@ The task message names the plan file and the increment number.
    - Tests: are the planned tests there, and do they assert behaviour
      rather than just running the code?
 3. Run the checks: in backend/, `uv run pytest -q` and `uv run ruff check .`;
-   for frontend changes, `npm run lint` (and `npm run build`) in `web/`.
+   for frontend changes, `npm run lint`, `npm test` and `npm run build` in `web/`.
 4. Verdict: APPROVE, or CHANGES REQUESTED with a numbered list of
    file:line, the problem, and the fix. Only real problems; no style
    preferences that CLAUDE.md doesn't state.
 
 Bash is for reading and checking only: git status/diff/log, pytest, ruff,
-npm run lint. Never change files, stage, commit or install packages.
+npm run lint, npm test, npm run build. Never change files, stage, commit or install packages.
 
 Your final message goes to the main session: the plan path (job 1), or the
 verdict and the numbered list (job 2).

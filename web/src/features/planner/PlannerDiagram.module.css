@@ -1,0 +1,142 @@
+.diagram {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* Scrolls inside its own box, never the page. */
+.scroller {
+  overflow: auto;
+  max-width: 100%;
+}
+
+.svg {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+  min-width: 300px;
+}
+
+.edge {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.conditional {
+  stroke-dasharray: 5 4;
+}
+
+.taken {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+.arrow path {
+  fill: var(--border);
+}
+
+.arrowTaken path {
+  fill: var(--accent);
+}
+
+.node rect {
+  fill: var(--surface);
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.label {
+  fill: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--step--1);
+  font-weight: 600;
+}
+
+.mark {
+  fill: var(--highlight);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge {
+  fill: var(--accent);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.visited rect {
+  fill: var(--accent-soft);
+  stroke: var(--accent);
+}
+
+.paused rect {
+  fill: var(--highlight-soft);
+  stroke: var(--highlight);
+  stroke-width: 2.5;
+}
+
+.planned rect {
+  fill: var(--accent-soft);
+  stroke: var(--success);
+  stroke-width: 2.5;
+}
+
+.noPlan rect {
+  stroke: var(--text-muted);
+  stroke-width: 2.5;
+}
+
+.current rect {
+  stroke: var(--accent);
+  stroke-width: 3;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .current rect {
+    animation: none;
+  }
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  list-style: none;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: var(--step--1);
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sampleSolid,
+.sampleDashed,
+.sampleTaken {
+  display: inline-block;
+  width: 24px;
+  border-top: 2px solid var(--border);
+}
+
+.sampleDashed {
+  border-top-style: dashed;
+}
+
+.sampleTaken {
+  border-top: 3px solid var(--accent);
+}
