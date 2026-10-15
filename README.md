@@ -20,6 +20,7 @@ Runs at http://localhost:8000 — docs at /docs.
 
 First time only, fill the database with sample data:
 ```
+uv run python -m app.scripts.load_data        # all five steps below, in order; safe to re-run
 uv run python -m app.scripts.seed             # crags + sectors
 uv run python -m app.scripts.seed_notes       # approach notes (no API calls)
 uv run python -m app.scripts.index_sectors_langchain   # LangChain PGVector index, used by /search/similar
@@ -38,6 +39,15 @@ first AI search fails with "UndefinedTable".
 `import_stays` calls the free public Overpass API, which is often busy. If a
 crag fails, just run it again later: finished crags come from the cache in
 `backend/.cache/overpass/` (kept a week; `--no-cache` forces fresh data).
+
+**Loading into another database.** `load_data` uses the same database settings as the app,
+so set them in a new PowerShell window: `CRAGMATCH_POSTGRES_URL`, or the five
+`CRAGMATCH_POSTGRES_*` parts (see Settings). It prints `host:port/name` and asks before
+writing; `--yes` skips the question and is for runs nobody watches. The load makes 1 Voyage
+request (the free tier allows 3 a minute), so wait a minute before a vibe search.
+**Never run `uv run pytest` in that window**: `conftest.py` builds the test URL from the same
+settings. Afterwards run `Remove-Item Env:CRAGMATCH_POSTGRES_URL` (or the variables you set),
+or close the window.
 
 ### 3. Frontend
 ```
@@ -214,9 +224,10 @@ backend/
       index_sectors_langchain.py  Index sectors into the LangChain PGVector store.
       rag_playground.py  Stage 6 steps 6.2, 6.4, 6.5, then the trip planner steps from 6.8 on (6.9a to 6.9c add the nodes, 6.10 the routed graph),
                          one function per step; a step can take an argument (`... 6.8 SHARECODE`).
-      seed.py            Sample Catalan crags/sectors.
+      load_data.py       Runs seed, seed_notes, index_sectors_langchain, seed_stays, import_stays in order; shows the target first; safe to re-run.
+      seed.py            Sample Catalan crags/sectors; skips what is already there.
       trip_planner.py    Run the Stage 6 trip planner on a group in the terminal (trace, approval, final plan).
-      seed_notes.py      Illustrative approach notes per sector (run before indexing).
+      seed_notes.py      Illustrative approach notes per sector, only on the sample sectors (run before indexing).
       seed_stays.py      Small hand-picked list of stays (illustrative).
       import_stays.py    Stays around every crag from OpenStreetMap.
 

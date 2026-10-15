@@ -62,7 +62,7 @@ def test_sector_loader_builds_documents_from_build_text(db_session):
     }
 
 
-def test_seed_notes_fills_notes_without_voyage(db_session, monkeypatch):
+def test_seed_notes_fills_listed_notes_and_keeps_others(db_session, monkeypatch):
     crag = add_crag(db_session)
     known = add_sector(db_session, crag, "Poble")
     unknown = add_sector(db_session, crag, "Unknown wall", notes="Old note.")
@@ -73,4 +73,4 @@ def test_seed_notes_fills_notes_without_voyage(db_session, monkeypatch):
 
     # main() closes the session, so read the rows again.
     assert db_session.get(Sector, known_id).approach_notes == seed_notes.NOTES["Poble"]
-    assert db_session.get(Sector, unknown_id).approach_notes is None
+    assert db_session.get(Sector, unknown_id).approach_notes == "Old note."

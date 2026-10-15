@@ -3,11 +3,15 @@
     uv run python -m app.scripts.seed_notes
 
 Run after seed and before index_sectors_langchain, because the index embeds
-the notes.
+the notes. Safe to re-run.
 """
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import SessionLocal
 from app.models import Sector
+from app.scripts.seed import sample_sector_keys
 
 # Illustrative notes for testing fuzzy search, not verified beta.
 NOTES = {
@@ -27,14 +31,27 @@ NOTES = {
 }
 
 
+def apply_notes(db: Session) -> tuple[int, int]:
+    """Set the listed notes on the sample sectors; return (set, already up to date)."""
+    sample_keys = sample_sector_keys()
+    changed = unchanged = 0
+    for sector in db.scalars(select(Sector).options(joinedload(Sector.crag))):
+        # Sectors made through the API keep their own notes (ticket 023).
+        if (sector.crag.name, sector.name) not in sample_keys or sector.name not in NOTES:
+            continue
+        if sector.approach_notes == NOTES[sector.name]:
+            unchanged += 1
+        else:
+            sector.approach_notes = NOTES[sector.name]
+            changed += 1
+    db.commit()
+    return changed, unchanged
+
+
 def main() -> None:
-    db = SessionLocal()
-    try:
-        for s in db.query(Sector).all():
-            s.approach_notes = NOTES.get(s.name)
-        db.commit()
-    finally:
-        db.close()
+    with SessionLocal() as db:
+        changed, unchanged = apply_notes(db)
+    print(f"Approach notes: {changed} set, {unchanged} already up to date; other sectors left as they are.")
 
 
 if __name__ == "__main__":
