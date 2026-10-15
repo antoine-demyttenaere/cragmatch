@@ -143,6 +143,46 @@ def test_cors_origins_from_a_comma_list(monkeypatch):
     assert build().cors_origins == ["https://a.example", "https://b.example"]
 
 
+def test_spending_settings_have_defaults(monkeypatch):
+    set_keys(monkeypatch)
+    set_parts(monkeypatch)
+    s = build()
+    assert s.claude_daily_cap_usd == 0.1
+    assert s.voyage_daily_cap_usd == 0.05
+    assert s.claude_input_usd_per_mtok == 3.0
+    assert s.claude_output_usd_per_mtok == 15.0
+    assert s.voyage_usd_per_mtok == 0.06
+    assert s.spending_timezone == "Europe/Madrid"
+
+
+def test_spending_settings_come_from_the_environment(monkeypatch):
+    set_keys(monkeypatch)
+    set_parts(monkeypatch)
+    monkeypatch.setenv("CRAGMATCH_CLAUDE_DAILY_CAP_USD", "2.5")
+    monkeypatch.setenv("CRAGMATCH_VOYAGE_USD_PER_MTOK", "0.1")
+    monkeypatch.setenv("CRAGMATCH_SPENDING_TIMEZONE", "Europe/Lisbon")
+    s = build()
+    assert s.claude_daily_cap_usd == 2.5
+    assert s.voyage_usd_per_mtok == 0.1
+    assert s.spending_timezone == "Europe/Lisbon"
+
+
+@pytest.mark.parametrize(
+    ("name", "value", "field"),
+    [
+        ("CRAGMATCH_CLAUDE_DAILY_CAP_USD", "-1", "claude_daily_cap_usd"),
+        ("CRAGMATCH_SPENDING_TIMEZONE", "Mars/Olympus", "CRAGMATCH_SPENDING_TIMEZONE"),
+    ],
+    ids=["negative_cap", "unknown_time_zone"],
+)
+def test_bad_spending_settings_are_rejected(monkeypatch, name, value, field):
+    set_keys(monkeypatch)
+    set_parts(monkeypatch)
+    monkeypatch.setenv(name, value)
+    with pytest.raises(ValidationError, match=field):
+        build()
+
+
 def test_tests_use_the_cragmatch_test_database(db_session):
     bind_url = db_session.get_bind().url
     app_url = make_url(settings.database_url)

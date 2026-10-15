@@ -19,9 +19,12 @@ from types import SimpleNamespace
 import pytest
 from langchain_core.documents import Document
 
+from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.rag.reasons import MatchReason, MatchReasons
-from app.services import similar_search
+from app.routers.search import DAILY_LIMIT_DETAIL
+from app.services import similar_search, spending
+from app.services.spending import Provider
 
 
 class FakeStore:
@@ -29,9 +32,11 @@ class FakeStore:
         self.scored: list[tuple[Document, float]] = []
         self.embed_error: Exception | None = None
         self.search_calls: list[int] = []  # the k of every search
+        self.embed_calls: list[str] = []  # the text of every embedding
         self.embeddings = SimpleNamespace(embed_query=self._embed_query)
 
     def _embed_query(self, text: str) -> list[float]:
+        self.embed_calls.append(text)
         if self.embed_error is not None:
             raise self.embed_error
         return [0.0]
@@ -42,13 +47,17 @@ class FakeStore:
 
 
 class FakeChain:
-    def __init__(self) -> None:
+    def __init__(self, report_claude_usage) -> None:
         self.answer = MatchReasons(reasons=[])
         self.error: Exception | None = None
+        self.usage: tuple[int, int] | None = None  # (input, output) tokens to report
         self.calls: list[dict] = []
+        self._report = report_claude_usage
 
-    def invoke(self, inputs: dict) -> MatchReasons:
+    def invoke(self, inputs: dict, config: dict | None = None) -> MatchReasons:
         self.calls.append(inputs)
+        if self.usage is not None:
+            self._report(config, *self.usage)
         if self.error is not None:
             raise self.error
         return self.answer
@@ -62,8 +71,8 @@ def store(monkeypatch) -> FakeStore:
 
 
 @pytest.fixture(autouse=True)
-def chain(monkeypatch) -> FakeChain:
-    fake = FakeChain()
+def chain(monkeypatch, report_claude_usage) -> FakeChain:
+    fake = FakeChain(report_claude_usage)
     monkeypatch.setattr(similar_search, "get_reasons_chain", lambda: fake)
     return fake
 
@@ -212,6 +221,87 @@ def test_similar_still_returns_results_when_reasons_chain_cannot_be_built(client
     results = response.json()["results"]
     assert len(results) == 1
     assert results[0]["reason"] is None
+
+
+# --- Daily spending cap ---------------------------------------------------
+
+
+def test_similar_counts_voyage_and_claude_spend(client, store, chain, db_session):
+    a_id = _make_sector(client, "A")
+    store.scored = [(_doc(a_id, "A"), 0.1)]
+    chain.usage = (800, 200)
+
+    response = client.post("/search/similar", json={"query": "quiet crag"})
+
+    assert response.status_code == 200
+    assert spending.spent(db_session, Provider.VOYAGE) == pytest.approx(
+        spending.voyage_cost("quiet crag")
+    )
+    assert spending.spent(db_session, Provider.CLAUDE) == pytest.approx(
+        spending.claude_cost(800, 200)
+    )
+
+
+def test_similar_with_no_matches_counts_only_voyage(client, store, db_session):
+    store.scored = []
+
+    response = client.post("/search/similar", json={"query": "quiet crag"})
+
+    assert response.status_code == 200
+    assert spending.spent(db_session, Provider.VOYAGE) > 0
+    assert spending.spent(db_session, Provider.CLAUDE) == 0.0
+
+
+def test_similar_does_not_count_a_failed_embedding(client, store, db_session):
+    store.embed_error = RuntimeError("Voyage is down")
+
+    response = client.post("/search/similar", json={"query": "quiet crag"})
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Couldn't reach the embedding service, try again later."
+    assert spending.spent(db_session, Provider.VOYAGE) == 0.0
+
+
+def test_similar_counts_the_tokens_when_the_reasons_fail(client, store, chain, db_session):
+    a_id = _make_sector(client, "A")
+    store.scored = [(_doc(a_id, "A"), 0.1)]
+    chain.usage = (800, 200)
+    chain.error = RuntimeError("answer was unusable")
+
+    response = client.post("/search/similar", json={"query": "x"})
+
+    assert response.status_code == 200
+    assert response.json()["results"][0]["reason"] is None
+    assert spending.spent(db_session, Provider.CLAUDE) == pytest.approx(
+        spending.claude_cost(800, 200)
+    )
+
+
+def test_similar_with_voyage_switched_off_makes_no_call(client, store, chain, monkeypatch):
+    monkeypatch.setattr(settings, "voyage_daily_cap_usd", 0)
+
+    response = client.post("/search/similar", json={"query": "x"})
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == DAILY_LIMIT_DETAIL
+    assert store.embed_calls == []
+    assert store.search_calls == []
+    assert chain.calls == []
+
+
+def test_similar_rejects_at_the_claude_limit_without_any_call(
+    client, store, chain, db_session, monkeypatch
+):
+    monkeypatch.setattr(settings, "claude_daily_cap_usd", 0.5)
+    spending.record_spend(db_session, Provider.CLAUDE, 0.5)
+
+    response = client.post("/search/similar", json={"query": "x"})
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == DAILY_LIMIT_DETAIL
+    assert store.embed_calls == []
+    assert store.search_calls == []
+    assert chain.calls == []
 
 
 # -----------------Rate limit test-----------------

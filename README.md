@@ -30,6 +30,11 @@ uv run python -m app.scripts.import_stays     # campsites/hostels/huts from Open
 The trip planner API needs `alembic upgrade head` for the `planner_runs` table. LangGraph's
 own checkpoint tables are created by the library on the first planner request, not by Alembic.
 
+Daily spending cap: today's estimated spend on Claude and Voyage is in `daily_spend`
+(`docker compose exec db psql -U <user> -d <db> -c "select * from daily_spend"`). Deleting
+today's row resets it. After pulling this change, run `uv run alembic upgrade head`, otherwise the
+first AI search fails with "UndefinedTable".
+
 `import_stays` calls the free public Overpass API, which is often busy. If a
 crag fails, just run it again later: finished crags come from the cache in
 `backend/.cache/overpass/` (kept a week; `--no-cache` forces fresh data).
@@ -79,12 +84,21 @@ not set.
 | `CRAGMATCH_POSTGRES_URL` | optional, deployments only | One URL instead of the five parts; it wins over them. `postgres://` and `postgresql://` both work; keep `?sslmode=require`. **If it is set in a developer's `.env`, the tests use `cragmatch_test` on that server.** |
 | `CRAGMATCH_ANTHROPIC_API_KEY`, `CRAGMATCH_VOYAGE_API_KEY` | required | Claude and Voyage keys. |
 | `CRAGMATCH_CORS_ORIGINS` | `http://localhost:5173` | Allowed browser origins, comma-separated. |
+| `CRAGMATCH_CLAUDE_DAILY_CAP_USD` | `0.1` | Claude's estimated spend allowed per day, in USD. 0 switches Claude off. |
+| `CRAGMATCH_VOYAGE_DAILY_CAP_USD` | `0.05` | Voyage's estimated spend allowed per day, in USD. 0 switches Voyage off. |
+| `CRAGMATCH_CLAUDE_INPUT_USD_PER_MTOK` | `3.0` | Claude input price, USD per million tokens. |
+| `CRAGMATCH_CLAUDE_OUTPUT_USD_PER_MTOK` | `15.0` | Claude output price, USD per million tokens (thinking tokens count). |
+| `CRAGMATCH_VOYAGE_USD_PER_MTOK` | `0.06` | Voyage price, USD per million tokens; applied to the query's UTF-8 bytes. |
+| `CRAGMATCH_SPENDING_TIMEZONE` | `Europe/Madrid` | IANA time zone; the spending day starts at midnight there. |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | for the `db` container | Read only by the database container. |
 | `PORT` | `8000` | Container only: port the API listens on. |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1,::1` | Container only: proxies whose client address headers are trusted. |
 | `HF_HOME` | `/home/cragmatch/.cache/huggingface` | Container only: where the Voyage tokenizer is downloaded; must be writable. |
 | `PGSSLMODE` | unset | Container only: TLS mode for the database connection when the URL has no `sslmode`. |
 | `VITE_API_URL` | `http://localhost:8000` | Web build only: the API address baked into the bundle (no trailing slash). |
+
+The caps are estimates in USD, not an invoice (check the prices against the providers' price
+lists). A reached cap answers 503 with its own message.
 
 ### Production-like run on this machine
 
@@ -123,7 +137,8 @@ backend/
 
     core/                App-wide setup, used by everything else.
       config.py          Settings from the environment or backend/.env
-                         (CRAGMATCH_ prefix): DB URL or parts, API keys, CORS origins.
+                         (CRAGMATCH_ prefix): DB URL or parts, API keys, CORS origins,
+                         daily caps, prices and time zone.
       database.py        SQLAlchemy engine, SessionLocal, and Base.
       dependencies.py    get_db(): one DB session per request, always closed.
       rate_limit.py      slowapi Limiter (per IP), used on the paid endpoints.
@@ -136,6 +151,7 @@ backend/
                          (grade range, max distance, max walk-in minutes, styles; empty = any).
       stay.py            Stay (campsite/hostel/refuge/...), StayType, StaySource.
       planner_run.py     PlannerRun: one trip planner run of a group (id = LangGraph thread id, creation time, node trace).
+      daily_spend.py     DailySpend: estimated spend per day and provider.
       __init__.py        Re-exports every model so all tables register on Base.
 
     schemas/             Pydantic request/response shapes, decoupled from models.
@@ -174,13 +190,16 @@ backend/
                          fallback server, cache), parse, duplicate detection.
       trip_planner.py    Trip planner run logic shared by the router and the script: advance(), start_run(),
                          answer_run(), run_view(), graph_structure().
+      spending.py        The daily cap: ensure_under_cap() before, record_spend() after every
+                         paid call.
 
     rag/                 Stage 6 LangChain code.
       loader.py          SectorLoader + build_text(): sectors as LangChain Documents.
       vectorstore.py     Voyage embeddings + PGVector store, collection "sectors"
                          (built once per process, cosine distance).
       llm.py             get_chat_model(): ChatAnthropic (timeout, retries);
-                         UsageLogger callback (token usage).
+                         UsageLogger callback (token usage);
+                         TokenCounter (one request's Claude tokens, for the cap).
       chain.py           RAG prompt, format_docs(), build_rag_chain().
       reasons.py         Per-sector match reasons: prompt, MatchReasons, build_reasons_chain(), get_reasons_chain().
       query_parsing.py   Natural-language query to ParsedFilters: parse prompt, build_parse_chain(), get_parse_chain().

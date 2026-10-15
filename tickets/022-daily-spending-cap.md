@@ -10,8 +10,8 @@
 ## Decisions already made by the user
 - Paid endpoints keep their rate limits, **and** the user wants a daily spending cap on Claude and
   Voyage (2026-10-13).
-- Defaults proposed by the earlier plan and not contradicted by the user: Claude USD 1.00 a day,
-  Voyage USD 0.50 a day, the day ending at midnight in Europe/Madrid, and an HTTP 503 when the cap is
+- Defaults proposed by the earlier plan and not contradicted by the user: Claude USD 0.1 a day,
+  Voyage USD 0.05 a day, the day ending at midnight in Europe/Madrid, and an HTTP 503 when the cap is
   reached. They are listed below as suggested defaults for the user to confirm.
 
 ## User story

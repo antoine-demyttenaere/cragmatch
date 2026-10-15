@@ -50,7 +50,7 @@ Assumed delivered first, as their plans describe: 017 (only `web/` remains), 018
   is enough and reads back as a Python `float`.
 
 **Choices on the ticket's open questions (all suggested defaults kept, in settings):**
-- Caps in USD: `CRAGMATCH_CLAUDE_DAILY_CAP_USD=1.00`, `CRAGMATCH_VOYAGE_DAILY_CAP_USD=0.50`. A cap of
+- Caps in USD: `CRAGMATCH_CLAUDE_DAILY_CAP_USD=0.1`, `CRAGMATCH_VOYAGE_DAILY_CAP_USD=0.05`. A cap of
   0 switches that provider off.
 - What is counted:
   - Claude: input tokens times `CRAGMATCH_CLAUDE_INPUT_USD_PER_MTOK` (default 3.00) plus output
