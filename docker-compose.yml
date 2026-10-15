@@ -11,5 +11,22 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  # The production image on this machine, reaching the database by its
+  # service name. Not started by a plain "docker compose up".
+  api:
+    profiles: ["prod"]
+    build: ./backend
+    image: cragmatch-api:local
+    env_file:
+      - backend/.env
+    environment:
+      CRAGMATCH_POSTGRES_HOST: db
+      CRAGMATCH_POSTGRES_PORT: "5432"
+      CRAGMATCH_CORS_ORIGINS: http://localhost:4173,http://localhost:5173
+    ports:
+      - "8001:8000"
+    depends_on:
+      - db
+
 volumes:
   postgres_data:

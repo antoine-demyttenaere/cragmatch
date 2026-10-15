@@ -60,7 +60,9 @@ def run_migrations_online() -> None:
     """
 
     from app.core.config import settings
-    config.set_main_option("sqlalchemy.url", settings.database_url)
+    # The option goes through ConfigParser interpolation, and a
+    # percent-encoded password contains "%".
+    config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
 
     connectable = engine_from_config(

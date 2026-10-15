@@ -1,4 +1,7 @@
-export const API_URL = "http://localhost:8000";
+// Vite bakes VITE_API_URL in at build time. `||` (not `??`) so an empty value
+// also falls back and development is unchanged. Only VITE_ variables reach
+// the bundle, so no backend secret can.
+export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 
 // An HTTP failure with its status, so screens can treat some statuses (422,
