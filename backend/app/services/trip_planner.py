@@ -24,6 +24,8 @@ from app.schemas.planner import (
 
 # The node that calls interrupt(): a run is waiting for an answer when the graph
 # is stopped right before (re-running) it.
+# Mirrored in web/src/features/planner/plannerNodes.ts: the diagram marks this node as
+# waiting, because the paused node is not in the trace.
 APPROVAL_NODE = "approve_sector"
 INTERRUPT_KEY = "__interrupt__"
 

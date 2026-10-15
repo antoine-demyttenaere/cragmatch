@@ -46,6 +46,9 @@ Runs at http://localhost:5173.
 ```
 cd backend
 uv run pytest
+
+cd ../web
+npm test
 ```
 
 ### Checks (same as CI)
@@ -56,10 +59,11 @@ uv run ruff check .
 
 cd ../web
 npm run lint
+npm test
 ```
 
 On every push and pull request, GitHub Actions runs three jobs: Backend tests, Ruff and
-ESLint. The tests run against the image built from `postgres.Dockerfile` with dummy settings
+ESLint (lint and Vitest unit tests for web/). The tests run against the image built from `postgres.Dockerfile` with dummy settings
 and outbound HTTP blocked, so no real key is used or needed. Dependencies come from `uv.lock`
 and `package-lock.json`, so a stale lockfile fails the run. The checks are visible on GitHub
 but do not block merging.
@@ -68,7 +72,7 @@ but do not block merging.
 
 ```
 .github/workflows/ci.yml  CI on every push and pull request: backend tests, ruff,
-                         ESLint (web/).
+                         ESLint and Vitest (web/).
 backend/
   app/
     main.py              FastAPI app: CORS, rate limiter, mounts the routers,
@@ -181,7 +185,10 @@ web/src/                 The app (design system, search, groups, stays, trip pla
   features/planner/      Plan the trip on the group page: start a run with dates, nights
                          and guests, the proposed sector with approve or not this one, the
                          plan with stays and booking links, the no-plan outcomes; resumes
-                         the group's latest run.
+                         the group's latest run; live diagram of the planner graph
+                         (dagre layout, own SVG), step list in plain words with details,
+                         skip and replay; *.test.ts Vitest tests for the pure helpers,
+                         planner.fixtures.ts test data.
 ```
 
 ## Where the stay data comes from

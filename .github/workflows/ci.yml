@@ -113,7 +113,10 @@ jobs:
         working-directory: web
         run: npm ci
 
-      # Keep this the last step: ticket 020 adds "web: npm test" right after it.
       - name: "web: npm run lint"
         working-directory: web
         run: npm run lint
+
+      - name: "web: npm test"
+        working-directory: web
+        run: npm test

@@ -1,7 +1,7 @@
 /*
   Design tokens: the one place where colours, type, spacing, radius and shadow
   are defined. Components only use these variables (never a hex code), so the
-  look changes here and nowhere else. Ticket 018's SVG diagram reads them too.
+  look changes here and nowhere else. The planner diagram's SVG (ticket 020) reads them too.
 */
 :root {
   color-scheme: light dark;
