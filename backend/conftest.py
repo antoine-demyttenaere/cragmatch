@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from app.agent.graph import build_trip_planner
@@ -12,11 +13,12 @@ from app.core.rate_limit import limiter
 from app.main import app
 from app.routers.planner import get_trip_planner
 
-# Same connection, different database name — swap "cragmatch" for
-# "cragmatch_test" in the URL your app already builds.
+# Same connection, different database name: take the URL the app builds
+# (the five parts or CRAGMATCH_POSTGRES_URL) and swap the database.
 TEST_DATABASE_URL = (
-    f"postgresql+psycopg://{settings.postgres_user}:{settings.postgres_password}"
-    f"@{settings.postgres_host}:{settings.postgres_port}/cragmatch_test"
+    make_url(settings.database_url)
+    .set(database="cragmatch_test")
+    .render_as_string(hide_password=False)
 )
 
 

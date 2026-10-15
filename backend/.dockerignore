@@ -1,0 +1,13 @@
+# Secrets and local caches never enter the build context.
+.env
+.env.*
+.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+.cache
+tests
+conftest.py
+Dockerfile
+.dockerignore

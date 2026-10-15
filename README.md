@@ -68,19 +68,62 @@ and outbound HTTP blocked, so no real key is used or needed. Dependencies come f
 and `package-lock.json`, so a stale lockfile fails the run. The checks are visible on GitHub
 but do not block merging.
 
+### Settings
+
+Set in the environment or in `backend/.env` (see `backend/.env.example`). A blank value counts as
+not set.
+
+| Variable | Required / default | Purpose |
+|---|---|---|
+| `CRAGMATCH_POSTGRES_USER`, `_PASSWORD`, `_DB`, `_HOST`, `_PORT` | all five, unless `CRAGMATCH_POSTGRES_URL` is set | Database connection, used locally and in CI. |
+| `CRAGMATCH_POSTGRES_URL` | optional, deployments only | One URL instead of the five parts; it wins over them. `postgres://` and `postgresql://` both work; keep `?sslmode=require`. **If it is set in a developer's `.env`, the tests use `cragmatch_test` on that server.** |
+| `CRAGMATCH_ANTHROPIC_API_KEY`, `CRAGMATCH_VOYAGE_API_KEY` | required | Claude and Voyage keys. |
+| `CRAGMATCH_CORS_ORIGINS` | `http://localhost:5173` | Allowed browser origins, comma-separated. |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | for the `db` container | Read only by the database container. |
+| `PORT` | `8000` | Container only: port the API listens on. |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1,::1` | Container only: proxies whose client address headers are trusted. |
+| `HF_HOME` | `/home/cragmatch/.cache/huggingface` | Container only: where the Voyage tokenizer is downloaded; must be writable. |
+| `PGSSLMODE` | unset | Container only: TLS mode for the database connection when the URL has no `sslmode`. |
+| `VITE_API_URL` | `http://localhost:8000` | Web build only: the API address baked into the bundle (no trailing slash). |
+
+### Production-like run on this machine
+
+The backend image runs next to the dev database through the `prod` compose profile (PowerShell):
+```
+docker compose --profile prod build api
+docker compose --profile prod run --rm api alembic upgrade head
+docker compose --profile prod up -d api
+```
+Then open http://localhost:8001/health and http://localhost:8001/docs. For the frontend:
+```
+cd web
+$env:VITE_API_URL = "http://localhost:8001"
+npm run build
+Remove-Item Env:VITE_API_URL
+npm run preview
+```
+The preview serves on http://localhost:4173, which the service allows. Stop the container with
+`docker compose --profile prod stop api`.
+
+Without compose, a container reaches the dev database at `host.docker.internal:5433`, not
+`localhost`. `docker run --env-file` keeps the quotes of `KEY=""` lines, so use compose or `-e`.
+
 ## Project structure
 
 ```
 .github/workflows/ci.yml  CI on every push and pull request: backend tests, ruff,
                          ESLint and Vitest (web/).
+docker-compose.yml       The db service; the api service under the prod profile.
 backend/
+  Dockerfile             API image: one worker on $PORT, non-root, Alembic included.
+  .dockerignore          Keeps .env, caches and tests out of the image.
   app/
     main.py              FastAPI app: CORS, rate limiter, mounts the routers,
                          defines / and /health.
 
     core/                App-wide setup, used by everything else.
-      config.py          Settings from backend/.env (CRAGMATCH_ prefix): DB
-                         credentials, Anthropic and Voyage API keys.
+      config.py          Settings from the environment or backend/.env
+                         (CRAGMATCH_ prefix): DB URL or parts, API keys, CORS origins.
       database.py        SQLAlchemy engine, SessionLocal, and Base.
       dependencies.py    get_db(): one DB session per request, always closed.
       rate_limit.py      slowapi Limiter (per IP), used on the paid endpoints.
@@ -170,7 +213,8 @@ postgres.Dockerfile      Postgres image = postgis/postgis + pgvector.
 web/src/                 The app (design system, search, groups, stays, trip planner).
   main.tsx               Entry point: font, tokens and base styles, then App.
   styles/                tokens.css (colours, type, spacing; light and dark) and base.css.
-  api/                   client.ts (apiRequest, ApiError) and types.ts (mirrors the backend schemas).
+  vite-env.d.ts          Types VITE_API_URL for import.meta.env.
+  api/                   client.ts (API_URL from VITE_API_URL, apiRequest, ApiError) and types.ts (mirrors the backend schemas).
   constants.ts           Grades (same order as the backend), styles, stay types, labels.
   components/            UI kit, each with a CSS Module: Button, Field, Chip, Card,
                          SegmentedControl, StateMessage, Sheet, Icon.

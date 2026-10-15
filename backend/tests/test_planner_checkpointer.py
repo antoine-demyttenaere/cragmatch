@@ -11,6 +11,11 @@ def test_psycopg_conninfo_drops_the_driver_name():
     assert psycopg_conninfo("postgresql+psycopg://u:p@h:5433/db") == "postgresql://u:p@h:5433/db"
 
 
+def test_psycopg_conninfo_keeps_ssl_options():
+    url = "postgresql+psycopg://u:p@h:5432/db?sslmode=require"
+    assert psycopg_conninfo(url) == "postgresql://u:p@h:5432/db?sslmode=require"
+
+
 def test_postgres_saver_resumes_a_run_after_reopening(db_session, agreeing_group):
     # db_session is bound to the cragmatch_test engine: never the dev database.
     test_url = db_session.get_bind().url.render_as_string(hide_password=False)
