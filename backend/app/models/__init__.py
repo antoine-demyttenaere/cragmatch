@@ -6,8 +6,9 @@ from app.models.member import Member
 from app.models.group import Group
 from app.models.stay import Stay, StaySource, StayType
 from app.models.planner_run import PlannerRun
+from app.models.daily_spend import DailySpend
 
 __all__ = [
     "Crag", "Sector", "ClimbingStyle", "Member", "Group", "Stay", "StayType", "StaySource",
-    "PlannerRun",
+    "PlannerRun", "DailySpend",
 ]

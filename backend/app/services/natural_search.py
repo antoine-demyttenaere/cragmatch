@@ -8,10 +8,13 @@ turns errors into HTTP codes.
 from sqlalchemy.orm import Session
 
 from app.models import ClimbingStyle
+from app.rag.llm import TokenCounter
 from app.rag.query_parsing import get_parse_chain
 from app.schemas.search import NaturalSearchResponse, ParsedFilters
+from app.services import spending
 from app.services.geo import BARCELONA
 from app.services.search import find_matching_sectors
+from app.services.spending import Provider
 
 
 class AssistantUnavailableError(Exception):
@@ -26,14 +29,22 @@ class UnusableFiltersError(Exception):
     """The parsed filters can't be applied; str(exc) is the message for the user."""
 
 
-def _parse(query: str) -> ParsedFilters:
+def _parse(db: Session, query: str) -> ParsedFilters:
+    # Outside the try, so the cap error is not turned into AssistantUnavailableError.
+    spending.ensure_under_cap(db, Provider.CLAUDE)
+    usage = TokenCounter()
     # Building the chain is inside the try too: a missing key or bad config is
     # also "assistant unavailable". This catches OutputParserException as well,
     # where Stage 3 crashed with a 500 on parsed_output=None.
     try:
-        return get_parse_chain().invoke({"query": query})
+        return get_parse_chain().invoke({"query": query}, config={"callbacks": [usage]})
     except Exception as exc:
         raise AssistantUnavailableError from exc
+    finally:
+        # The tokens are billed even when the answer then turns out unusable.
+        spending.record_spend(
+            db, Provider.CLAUDE, spending.claude_cost(usage.input_tokens, usage.output_tokens)
+        )
 
 
 def _style(filters: ParsedFilters) -> ClimbingStyle | None:
@@ -46,7 +57,8 @@ def _style(filters: ParsedFilters) -> ClimbingStyle | None:
 
 
 def find_sectors_from_query(db: Session, query: str) -> NaturalSearchResponse:
-    filters = _parse(query)
+    """Claude's daily cap is checked first; a reached cap raises DailyCapReached."""
+    filters = _parse(db, query)
     if not filters.understood:
         raise QueryNotUnderstoodError
 

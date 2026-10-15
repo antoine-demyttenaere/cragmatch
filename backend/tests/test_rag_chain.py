@@ -4,6 +4,7 @@ import logging
 
 import pytest
 from langchain_core.documents import Document
+from langchain_core.exceptions import OutputParserException
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.output_parsers import PydanticOutputParser
@@ -13,7 +14,7 @@ from pydantic import BaseModel
 from app.core.config import settings
 from app.rag import query_parsing, reasons
 from app.rag.chain import build_rag_chain, format_docs
-from app.rag.llm import get_chat_model
+from app.rag.llm import TokenCounter, get_chat_model
 from app.rag.query_parsing import PARSE_SYSTEM_PROMPT, build_parse_chain, get_parse_chain
 from app.rag.reasons import (
     MatchReason,
@@ -240,6 +241,29 @@ def test_parse_chain_logs_token_usage(caplog):
 
     assert answer == CLEAR
     assert "Claude natural_search: 10 in / 5 out tokens" in caplog.text
+
+
+def test_counter_given_at_invoke_sees_the_call_next_to_the_chain_logger(caplog):
+    caplog.set_level(logging.INFO, logger="app.services.llm")
+    counter = TokenCounter()
+
+    build_parse_chain(FakeJsonModel(CLEAR.model_dump_json())).invoke(
+        {"query": "q"}, config={"callbacks": [counter]}
+    )
+
+    assert (counter.input_tokens, counter.output_tokens) == (10, 5)
+    assert "Claude natural_search: 10 in / 5 out tokens" in caplog.text
+
+
+def test_counter_keeps_the_tokens_of_an_unusable_answer():
+    counter = TokenCounter()
+
+    with pytest.raises(OutputParserException):
+        build_reasons_chain(FakeJsonModel("not json")).invoke(
+            {"query": "q", "sectors": "id=1 | t"}, config={"callbacks": [counter]}
+        )
+
+    assert (counter.input_tokens, counter.output_tokens) == (10, 5)
 
 
 def test_playground_offers_only_the_langchain_steps():

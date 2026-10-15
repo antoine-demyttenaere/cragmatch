@@ -21,6 +21,14 @@ def get_chat_model(max_tokens: int = 1024) -> ChatAnthropic:
     )
 
 
+def _token_usage(response: LLMResult) -> dict | None:
+    try:
+        generation = response.generations[0][0]
+    except IndexError:
+        return None
+    return getattr(getattr(generation, "message", None), "usage_metadata", None)
+
+
 class UsageLogger(BaseCallbackHandler):
     # with_structured_output returns only the parsed object, so usage is read where
     # LangChain still sees the raw message: the model's on_llm_end event.
@@ -31,10 +39,21 @@ class UsageLogger(BaseCallbackHandler):
         self.purpose = purpose
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
-        try:
-            generation = response.generations[0][0]
-        except IndexError:
-            return
-        usage = getattr(getattr(generation, "message", None), "usage_metadata", None)
+        usage = _token_usage(response)
         if usage:
             log_tokens(self.purpose, usage["input_tokens"], usage["output_tokens"])
+
+
+class TokenCounter(BaseCallbackHandler):
+    # One instance per request, passed at invoke: the chains are cached and
+    # shared between threads, so counts kept on them would mix requests.
+    def __init__(self) -> None:
+        super().__init__()
+        self.input_tokens = 0
+        self.output_tokens = 0
+
+    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
+        usage = _token_usage(response)
+        if usage:
+            self.input_tokens += usage["input_tokens"]
+            self.output_tokens += usage["output_tokens"]

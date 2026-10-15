@@ -49,6 +49,9 @@ Backend commands run from `backend/`, frontend commands from `web/`.
 - Stays: `find_stays_near()`, `airbnb_url()`, `booking_url()` in `services/stays.py`.
 - Claude: `get_chat_model()` and `UsageLogger` in `rag/llm.py`, `LLM_MODEL` and
   `log_tokens()` in `services/llm.py`.
+- Spending cap: `ensure_under_cap()` before and `record_spend()` after every Claude or
+  Voyage call, with `claude_cost()` / `voyage_cost()` (`services/spending.py`);
+  `TokenCounter` in `rag/llm.py` counts a request's Claude tokens.
 - Embeddings and vector search: `get_embeddings()` / `get_vector_store()` in
   `rag/vectorstore.py`, `EMBED_MODEL` in `services/embedding.py`.
 - Sector text: `SectorLoader` / `build_text()` in `rag/loader.py`.

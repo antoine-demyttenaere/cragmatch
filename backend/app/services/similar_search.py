@@ -11,9 +11,12 @@ from langchain_core.documents import Document
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Sector
+from app.rag.llm import TokenCounter
 from app.rag.reasons import format_sectors, get_reasons_chain
 from app.rag.vectorstore import get_vector_store
 from app.schemas.search import SimilarMatch, SimilarSearchResponse
+from app.services import spending
+from app.services.spending import Provider
 
 logger = logging.getLogger(__name__)
 
@@ -49,20 +52,31 @@ def _attach_sectors(
     return ranked
 
 
-def _explain(query: str, docs: list[Document]) -> dict[int, str]:
+def _explain(db: Session, query: str, docs: list[Document]) -> dict[int, str]:
     if not docs:
         return {}
+    usage = TokenCounter()
     # Building the chain is inside the try too: a missing key or bad config
     # should only cost the reasons, not the search results.
     try:
-        answer = get_reasons_chain().invoke({"query": query, "sectors": format_sectors(docs)})
+        answer = get_reasons_chain().invoke(
+            {"query": query, "sectors": format_sectors(docs)}, config={"callbacks": [usage]}
+        )
         return {r.sector_id: r.reason for r in answer.reasons}
     except Exception:
         logger.exception("reasons chain failed; returning results without reasons")
         return {}
+    finally:
+        # The tokens are billed even when the answer then turns out unusable.
+        spending.record_spend(
+            db, Provider.CLAUDE, spending.claude_cost(usage.input_tokens, usage.output_tokens)
+        )
 
 
 def find_similar_sectors(db: Session, query: str, limit: int) -> SimilarSearchResponse:
+    # The endpoint needs both providers, and a rejected request must make no
+    # call at all.
+    spending.ensure_under_cap(db, Provider.VOYAGE, Provider.CLAUDE)
     store = get_vector_store()
 
     # Only the Voyage call is in the try, so a database error stays a 500.
@@ -70,10 +84,11 @@ def find_similar_sectors(db: Session, query: str, limit: int) -> SimilarSearchRe
         query_vec = store.embeddings.embed_query(query)
     except Exception as exc:
         raise EmbeddingUnavailableError from exc
+    spending.record_spend(db, Provider.VOYAGE, spending.voyage_cost(query))
 
     scored = store.similarity_search_with_score_by_vector(query_vec, k=limit)
     ranked = _attach_sectors(db, scored)
-    reasons = _explain(query, [doc for _, doc, _ in ranked])
+    reasons = _explain(db, query,[doc for _, doc, _ in ranked])
 
     return SimilarSearchResponse(
         results=[

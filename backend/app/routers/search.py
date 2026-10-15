@@ -16,9 +16,15 @@ from app.services.natural_search import (
     find_sectors_from_query,
 )
 from app.services.similar_search import EmbeddingUnavailableError, find_similar_sectors
+from app.services.spending import DailyCapReached
 
 import logging
 logger = logging.getLogger(__name__)
+
+DAILY_LIMIT_DETAIL = (
+    "Today's spending limit for the AI searches is reached. "
+    "Try again tomorrow, or use the filter search."
+)
 
 
 router = APIRouter()
@@ -29,6 +35,9 @@ router = APIRouter()
 def search_natural(request: Request, body: NaturalSearchRequest, db: Session = Depends(get_db)):
     try:
         return find_sectors_from_query(db, body.query)
+    except DailyCapReached as exc:
+        logger.warning("Daily spending cap reached for %s", exc.provider)
+        raise HTTPException(status_code=503, detail=DAILY_LIMIT_DETAIL)
     except AssistantUnavailableError:
         logger.exception("Failed to parse natural language query")
         raise HTTPException(
@@ -59,6 +68,9 @@ def search_natural(request: Request, body: NaturalSearchRequest, db: Session = D
 def search_similar(request: Request, body: SimilarSearchRequest, db: Session = Depends(get_db)):
     try:
         return find_similar_sectors(db, body.query, body.limit)
+    except DailyCapReached as exc:
+        logger.warning("Daily spending cap reached for %s", exc.provider)
+        raise HTTPException(status_code=503, detail=DAILY_LIMIT_DETAIL)
     except EmbeddingUnavailableError:
         logger.exception("Failed to embed query")
         raise HTTPException(
