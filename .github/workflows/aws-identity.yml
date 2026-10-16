@@ -1,0 +1,26 @@
+name: AWS identity check
+
+# Run by hand from the Actions tab. It shows that the OIDC trust works from main and fails from any
+# other branch. It uses repository variables, not secrets: the role ARN is not a secret and no AWS
+# key exists anywhere.
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  whoami:
+    name: Assume the deploy role
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+
+      - name: Who am I
+        run: aws sts get-caller-identity --query Arn --output text

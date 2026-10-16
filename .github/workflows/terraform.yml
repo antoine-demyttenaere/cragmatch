@@ -1,0 +1,80 @@
+name: Terraform
+
+on:
+  push:
+    paths: ["infra/**", ".github/workflows/terraform.yml"]
+  pull_request:
+    paths: ["infra/**", ".github/workflows/terraform.yml"]
+
+# Nothing here talks to AWS: init runs with -backend=false and the tests use a mocked provider.
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    name: Terraform
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.16.6
+          terraform_wrapper: false
+
+      - name: Terraform fmt
+        working-directory: infra
+        run: terraform fmt -check -recursive -diff
+
+      - name: "bootstrap: init"
+        working-directory: infra/bootstrap
+        run: terraform init -backend=false -input=false
+
+      - name: "bootstrap: validate"
+        working-directory: infra/bootstrap
+        run: terraform validate -no-color
+
+      - name: "bootstrap: test"
+        working-directory: infra/bootstrap
+        run: terraform test -no-color
+
+      - name: "main: init"
+        working-directory: infra/main
+        run: terraform init -backend=false -input=false
+
+      - name: "main: validate"
+        working-directory: infra/main
+        run: terraform validate -no-color
+
+      - name: "main: test"
+        working-directory: infra/main
+        run: terraform test -no-color
+
+      - name: ShellCheck
+        run: shellcheck infra/main/host/*.sh infra/main/host/db/initdb/*.sh
+
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: v0.64.0
+
+      - name: tflint init
+        working-directory: infra
+        env:
+          # The plugin download from GitHub needs a token to avoid rate limits.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: tflint --init --config="$GITHUB_WORKSPACE/infra/.tflint.hcl"
+
+      - name: tflint
+        working-directory: infra
+        run: tflint --recursive --config="$GITHUB_WORKSPACE/infra/.tflint.hcl"
+
+  db-image:
+    name: Cloud database image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build and check the cloud database image
+        run: bash infra/main/host/check-db-image.sh

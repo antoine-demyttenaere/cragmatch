@@ -1,0 +1,16 @@
+[Unit]
+Description=CragMatch Postgres (PostGIS and pgvector) in Docker
+Requires=docker.service
+After=docker.service
+# Without the data volume, Postgres would quietly create an empty database on the root disk.
+RequiresMountsFor=/srv/cragmatch
+
+[Service]
+ExecStartPre=-/usr/bin/docker rm -f db
+ExecStart=/usr/bin/docker run --rm --name db --network cragmatch -p 127.0.0.1:5432:5432 --env-file /etc/cragmatch/db-environment -v /srv/cragmatch/pgdata:/var/lib/postgresql/data -v /srv/cragmatch/pgtls:/tls:ro --shm-size=128m cragmatch-db
+ExecStop=/usr/bin/docker stop -t 60 db
+TimeoutStopSec=90
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

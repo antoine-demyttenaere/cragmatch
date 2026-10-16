@@ -23,7 +23,7 @@ from app.agent.state import (
     PlannerContext,
     TripPlan,
     TripState,
-)
+) 
 from app.models import Member, Sector
 from app.schemas.group import GroupSectorMatch
 from app.schemas.stay import BookingLinks, NearbyStay
