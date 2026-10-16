@@ -1,0 +1,18 @@
+# Copy to terraform.tfvars (gitignored) and replace the placeholders.
+
+# The 12-digit id of the CragMatch AWS account.
+aws_account_id = "123456789012"
+
+# Where the budget alerts go.
+owner_email = "owner@example.com"
+
+# Only this repository (and only its main branch) may assume the deploy role.
+github_repository = "your-github-user/cragmatch"
+
+# Optional, shown with their defaults:
+# region                = "eu-west-1"
+# instance_type         = "t4g.small"
+# data_volume_gb        = 4
+# backup_retention_days = 7
+# budget_limit_usd      = 11.20
+# activate_cost_allocation_tag = false

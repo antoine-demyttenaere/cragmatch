@@ -72,7 +72,7 @@ def build_trip_planner(checkpointer: Checkpointer = None) -> CompiledStateGraph:
     builder = StateGraph(TripState, context_schema=PlannerContext)
     builder.add_node("merge_preferences", merge_group_preferences)
     builder.add_node("search_sectors", search_sectors)
-    builder.add_node("pick_sector", pick_sector)
+    builder.add_node("pick_sector", pick_sector) 
     builder.add_node("approve_sector", approve_sector)
     builder.add_node("find_stays", find_stays)
     builder.add_node("propose_plan", propose_plan)

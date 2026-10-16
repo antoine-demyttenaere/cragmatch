@@ -7,3 +7,14 @@ __pycache__/
 CLAUDE.local.md
 .claude/settings.local.json
 .claude/.backend-edited
+
+# Terraform: local working files and anything account-specific
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+*.tfvars
+!*.tfvars.example
+infra/backend.hcl
+backend_override.tf

@@ -1,0 +1,4 @@
+# The real infra/backend.hcl is gitignored and written by the runbook:
+#   terraform output -raw backend_config | Set-Content ..\backend.hcl
+bucket = "cragmatch-tfstate-123456789012-eu-west-1"
+region = "eu-west-1"

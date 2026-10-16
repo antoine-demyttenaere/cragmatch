@@ -132,12 +132,36 @@ The preview serves on http://localhost:4173, which the service allows. Stop the 
 Without compose, a container reaches the dev database at `host.docker.internal:5433`, not
 `localhost`. `docker run --env-file` keeps the quotes of `KEY=""` lines, so use compose or `-e`.
 
+## Deploying to AWS
+The cloud setup lives in `infra/` and `infra/RUNBOOK.md` is the only way in: account set-up,
+bootstrap, apply, costs, backups and destroy. Agents never run `terraform plan` or `apply`
+against AWS. The checks that need no account are `terraform fmt -check -recursive infra`,
+`terraform init -backend=false` then `terraform validate` and `terraform test` in
+`infra/bootstrap` and `infra/main`, and `bash infra/main/host/check-db-image.sh` (needs Docker).
+
 ## Project structure
 
 ```
 .github/workflows/ci.yml  CI on every push and pull request: backend tests, ruff,
                          ESLint and Vitest (web/).
+.github/workflows/terraform.yml  Terraform fmt, validate and offline tests for both stacks,
+                         shellcheck, tflint, and the cloud database image check (only when
+                         infra/ changes).
+.github/workflows/aws-identity.yml  Manual run: assumes the AWS deploy role through OIDC
+                         and prints its ARN (shows the trust works from main only).
 docker-compose.yml       The db service; the api service under the prod profile.
+infra/                   AWS as Terraform (ticket 024). RUNBOOK.md is the only way in.
+  RUNBOOK.md             Account set-up, bootstrap, apply, checks, costs, backups, destroy.
+  .tflint.hcl            tflint config (the Project tag rule).
+  backend.hcl.example    Shape of the gitignored backend.hcl that names the state bucket.
+  bootstrap/             Run once: the versioned, encrypted S3 state bucket (S3 lockfile).
+    tests/               Offline terraform tests for the bucket.
+  main/                  Network, one Graviton host, Postgres host files, SSM password,
+                         budget alerts, GitHub OIDC deploy role.
+    tests/               Offline terraform tests with a mocked AWS provider.
+    host/                First-boot script, systemd unit, and check-db-image.sh.
+      db/                Cloud database image (Postgres 17, PostGIS, pgvector, TLS only)
+                         and its first-start init scripts.
 backend/
   Dockerfile             API image: one worker on $PORT, non-root, Alembic included.
   .dockerignore          Keeps .env, caches and tests out of the image.
