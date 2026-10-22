@@ -139,6 +139,9 @@ against AWS. The checks that need no account are `terraform fmt -check -recursiv
 `terraform init -backend=false` then `terraform validate` and `terraform test` in
 `infra/bootstrap` and `infra/main`, and `bash infra/main/host/check-db-image.sh` (needs Docker).
 
+Pushes to `main` deploy the backend after `CI` passes (the `Deploy` workflow). Rollbacks and logs are in
+the runbook.
+
 ## Project structure
 
 ```
@@ -149,6 +152,8 @@ against AWS. The checks that need no account are `terraform fmt -check -recursiv
                          infra/ changes).
 .github/workflows/aws-identity.yml  Manual run: assumes the AWS deploy role through OIDC
                          and prints its ARN (shows the trust works from main only).
+.github/workflows/deploy.yml  After CI on main: build the arm64 API image, push to ECR,
+                         deploy through SSM.
 docker-compose.yml       The db service; the api service under the prod profile.
 infra/                   AWS as Terraform (ticket 024). RUNBOOK.md is the only way in.
   RUNBOOK.md             Account set-up, bootstrap, apply, checks, costs, backups, destroy.
@@ -157,9 +162,11 @@ infra/                   AWS as Terraform (ticket 024). RUNBOOK.md is the only w
   bootstrap/             Run once: the versioned, encrypted S3 state bucket (S3 lockfile).
     tests/               Offline terraform tests for the bucket.
   main/                  Network, one Graviton host, Postgres host files, SSM password,
-                         budget alerts, GitHub OIDC deploy role.
+                         budget alerts, GitHub OIDC deploy role, ECR, API CloudFront
+                         distribution, deploy document.
     tests/               Offline terraform tests with a mocked AWS provider.
-    host/                First-boot script, systemd unit, and check-db-image.sh.
+    host/                First-boot script, systemd units (database, API), deploy, pull and
+                         environment scripts for the API, and check-db-image.sh.
       db/                Cloud database image (Postgres 17, PostGIS, pgvector, TLS only)
                          and its first-start init scripts.
 backend/

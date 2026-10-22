@@ -16,3 +16,6 @@ github_repository = "your-github-user/cragmatch"
 # backup_retention_days = 7
 # budget_limit_usd      = 11.20
 # activate_cost_allocation_tag = false
+# cors_origins                 = "http://localhost:5173"
+# claude_daily_cap_usd         = 0.10
+# voyage_daily_cap_usd         = 0.05

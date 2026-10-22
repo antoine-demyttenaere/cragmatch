@@ -1,0 +1,188 @@
+name: Deploy
+
+# After CI passes on a push to main: build the arm64 API image, push it to ECR and deploy it through
+# SSM. "Run workflow" redeploys or rolls back to an image that is already in ECR (it never builds).
+# No AWS key exists anywhere: the job assumes the deploy role through OIDC. The repository is public,
+# so these logs are public too: the host id, the API address and the account id are masked.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Full 40-character commit SHA of an image already in ECR
+        required: true
+        type: string
+      skip_migrations:
+        description: Skip the database migrations (tick this for a rollback)
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+# One deploy at a time; the web job of ticket 026 joins the same group.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  backend:
+    name: Deploy backend
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    # Only a green CI on a push to this repository's main, never a pull request run or a fork's
+    # branch that happens to be called main.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_repository.full_name == github.repository)
+    env:
+      EVENT: ${{ github.event_name }}
+      REPOSITORY: ${{ github.repository }}
+    steps:
+      - name: Pick the image tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.image_tag }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            tag="$INPUT_TAG"
+          else
+            tag="$HEAD_SHA"
+          fi
+          if ! [[ "$tag" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The image tag must be a 40-character commit SHA"
+            exit 1
+          fi
+          deploy=true
+          if [ "$EVENT" = "workflow_run" ]; then
+            # A slow, older CI run must not deploy over a newer commit.
+            main_sha="$(git ls-remote "https://github.com/$REPOSITORY.git" refs/heads/main | cut -f1)"
+            if [ "$main_sha" != "$tag" ]; then
+              echo "::notice::A newer commit is on main; its own run deploys it"
+              deploy=false
+            fi
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        if: steps.tag.outputs.deploy == 'true' && github.event_name == 'workflow_run'
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        if: steps.tag.outputs.deploy == 'true'
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+
+      - name: Read the host and the API address
+        if: steps.tag.outputs.deploy == 'true'
+        run: |
+          host="$(aws ssm get-parameter --name /cragmatch/deploy/host_instance_id \
+            --query Parameter.Value --output text)"
+          api_url="$(aws ssm get-parameter --name /cragmatch/deploy/api_url \
+            --query Parameter.Value --output text)"
+          echo "::add-mask::$host"
+          echo "::add-mask::$api_url"
+          # curl errors print the bare host name.
+          echo "::add-mask::${api_url#https://}"
+          {
+            echo "HOST=$host"
+            echo "API_URL=$api_url"
+          } >> "$GITHUB_ENV"
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: login
+        if: steps.tag.outputs.deploy == 'true'
+
+      - name: Is the image already in ECR
+        id: exists
+        if: steps.tag.outputs.deploy == 'true'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if aws ecr describe-images --repository-name cragmatch-api \
+            --image-ids "imageTag=$TAG" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "::error::No image with that tag is in ECR; a manual run never builds"
+            exit 1
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A re-run of the same commit skips the build, because tags are immutable.
+      - uses: docker/setup-buildx-action@v4
+        if: steps.tag.outputs.deploy == 'true' && steps.exists.outputs.exists == 'false'
+
+      - uses: docker/build-push-action@v7
+        if: steps.tag.outputs.deploy == 'true' && steps.exists.outputs.exists == 'false'
+        with:
+          context: backend
+          platforms: linux/arm64
+          push: true
+          # One manifest per tag and nothing untagged for the lifecycle rule to count.
+          provenance: false
+          sbom: false
+          labels: cragmatch.component=api
+          tags: ${{ steps.login.outputs.registry }}/cragmatch-api:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy through SSM
+        if: steps.tag.outputs.deploy == 'true'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          SKIP_MIGRATIONS: ${{ inputs.skip_migrations }}
+        run: |
+          migrations=yes
+          if [ "$SKIP_MIGRATIONS" = "true" ]; then
+            migrations=no
+          fi
+          command_id="$(aws ssm send-command --document-name cragmatch-deploy-api \
+            --instance-ids "$HOST" \
+            --parameters "imageTag=$TAG,runMigrations=$migrations" \
+            --timeout-seconds 600 --query Command.CommandId --output text)"
+
+          # Not "aws ssm wait": its limit is about 100 seconds and a deploy can take longer.
+          status=Pending
+          for _ in $(seq 1 120); do
+            status="$(aws ssm get-command-invocation --command-id "$command_id" \
+              --instance-id "$HOST" --query Status --output text 2> /dev/null || echo Pending)"
+            case "$status" in
+              Pending | InProgress | Delayed) sleep 10 ;;
+              *) break ;;
+            esac
+          done
+
+          echo "Status: $status"
+          aws ssm get-command-invocation --command-id "$command_id" --instance-id "$HOST" \
+            --query StandardOutputContent --output text || true
+          aws ssm get-command-invocation --command-id "$command_id" --instance-id "$HOST" \
+            --query StandardErrorContent --output text || true
+          if [ "$status" != "Success" ]; then
+            echo "::error::The deploy did not succeed (status $status)"
+            exit 1
+          fi
+
+      - name: Check the API through CloudFront
+        if: steps.tag.outputs.deploy == 'true'
+        run: |
+          body="$(curl -fsS --retry 6 --retry-delay 5 --retry-all-errors "$API_URL/health")"
+          if [[ "$body" != *'"database":"connected"'* ]]; then
+            echo "::error::/health did not report the database as connected"
+            exit 1
+          fi
+          echo "The API answers through CloudFront"

@@ -4,7 +4,10 @@ data "aws_ssm_parameter" "al2023_arm64" {
 
 locals {
   # The host files exist once, under host/, and are written onto the host by cloud-init.
-  # Only the parameter NAME of the password is here, never a secret.
+  # Only parameter NAMES are here, never a secret.
+  # Changing any file under host/ changes user_data and so REPLACES the host on apply: a few minutes
+  # down, data kept (the drill in infra/RUNBOOK.md). The instance gets it gzip-compressed (EC2 allows
+  # 16 KB after compression).
   user_data = "#cloud-config\n${yamlencode({
     write_files = [
       {
@@ -14,8 +17,33 @@ locals {
           "REGION=${var.region}",
           "DATA_VOLUME_ID=${aws_ebs_volume.data.id}",
           "DB_PASSWORD_PARAMETER=${aws_ssm_parameter.db_password.name}",
+          "ECR_REPOSITORY_URL=${aws_ecr_repository.api.repository_url}",
+          "API_SETTINGS_PARAMETER=${aws_ssm_parameter.api_settings.name}",
+          "ANTHROPIC_KEY_PARAMETER=${aws_ssm_parameter.anthropic_api_key.name}",
+          "VOYAGE_KEY_PARAMETER=${aws_ssm_parameter.voyage_api_key.name}",
+          "API_LOG_GROUP=${aws_cloudwatch_log_group.api.name}",
           "",
         ])
+      },
+      {
+        path        = "/opt/cragmatch/cragmatch-api.service"
+        permissions = "0644"
+        content     = file("${path.module}/host/cragmatch-api.service")
+      },
+      {
+        path        = "/opt/cragmatch/deploy-api.sh"
+        permissions = "0755"
+        content     = file("${path.module}/host/deploy-api.sh")
+      },
+      {
+        path        = "/opt/cragmatch/render-api-environment.sh"
+        permissions = "0755"
+        content     = file("${path.module}/host/render-api-environment.sh")
+      },
+      {
+        path        = "/opt/cragmatch/pull-api-image.sh"
+        permissions = "0755"
+        content     = file("${path.module}/host/pull-api-image.sh")
       },
       {
         path        = "/opt/cragmatch/host-setup.sh"
@@ -64,7 +92,7 @@ resource "aws_instance" "host" {
     cpu_credits = "standard"
   }
 
-  # Hop limit 1: containers cannot borrow the host's role. Ticket 025 passes secrets in from the host.
+  # Hop limit 1: containers cannot borrow the host's role. The host passes secrets in itself.
   metadata_options {
     http_tokens                 = "required"
     http_put_response_hop_limit = 1
@@ -78,7 +106,8 @@ resource "aws_instance" "host" {
     tags = { Name = "cragmatch-host-root" }
   }
 
-  user_data                   = local.user_data
+  # Compressed: the plain text is over EC2's 16 KB limit with the API files. cloud-init reads gzip.
+  user_data_base64            = base64gzip(local.user_data)
   user_data_replace_on_change = true
 
   tags = { Name = "cragmatch-host" }

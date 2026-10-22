@@ -90,6 +90,43 @@ variable "activate_cost_allocation_tag" {
   default     = false
 }
 
+# Ticket 026 sets this to the site's own origin (its CloudFront address).
+variable "cors_origins" {
+  description = "Browser origins allowed to read the API's answers, comma-separated, each like https://example.com (no path, no trailing slash, never *). The default lets a local npm run dev use the cloud API."
+  type        = string
+  default     = "http://localhost:5173"
+
+  validation {
+    condition = alltrue([
+      for origin in split(",", var.cors_origins) : can(regex("^https?://[A-Za-z0-9.-]+(:[0-9]+)?$", origin))
+    ])
+    error_message = "Every cors_origins entry must be an origin like https://example.com: no *, no path, no trailing slash."
+  }
+}
+
+# These defaults match app/core/config.py. Set a higher cloud cap in terraform.tfvars. 0 switches that provider off.
+variable "claude_daily_cap_usd" {
+  description = "Daily spending cap for Claude in USD (ticket 022). 0 switches Claude off."
+  type        = number
+  default     = 0.10
+
+  validation {
+    condition     = var.claude_daily_cap_usd >= 0
+    error_message = "claude_daily_cap_usd cannot be negative."
+  }
+}
+
+variable "voyage_daily_cap_usd" {
+  description = "Daily spending cap for Voyage in USD (ticket 022). 0 switches Voyage off."
+  type        = number
+  default     = 0.05
+
+  validation {
+    condition     = var.voyage_daily_cap_usd >= 0
+    error_message = "voyage_daily_cap_usd cannot be negative."
+  }
+}
+
 variable "db_password_version" {
   description = "Bumping this writes a NEW password value to the SSM parameter but does not change the password inside Postgres. Follow the rotation steps in infra/RUNBOOK.md, which do both."
   type        = number

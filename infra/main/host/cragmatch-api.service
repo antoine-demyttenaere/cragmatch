@@ -1,0 +1,30 @@
+[Unit]
+Description=CragMatch API in Docker (one instance)
+Requires=docker.service cragmatch-db.service
+After=docker.service cragmatch-db.service network-online.target
+Wants=network-online.target
+# A database restart restarts the API, so no pool keeps dead connections.
+# Without the data volume the Hugging Face cache and the last deployed image would be missing.
+RequiresMountsFor=/srv/cragmatch
+# Quiet until the first deploy has written the image to run.
+ConditionPathExists=/srv/cragmatch/api/current-image
+
+[Service]
+# REGION, API_LOG_GROUP and the other names, then API_IMAGE=<repository>:<sha>.
+EnvironmentFile=/opt/cragmatch/host-settings
+EnvironmentFile=/srv/cragmatch/api/current-image
+ExecStartPre=/opt/cragmatch/render-api-environment.sh
+ExecStartPre=/opt/cragmatch/pull-api-image.sh ${API_IMAGE}
+ExecStartPre=-/usr/bin/docker rm -f api
+# One host, one unit and one container name: Docker refuses a second container called api. The image's
+# own CMD (one worker, because the rate limits live in memory) applies, so nothing follows the image.
+# The Hugging Face cache is on the data volume, so the tokenizer is downloaded once, ever. The OOM
+# score makes the kernel kill the API before Postgres.
+ExecStart=/usr/bin/docker run --rm --name api --network cragmatch -p 80:8000 --env-file /etc/cragmatch/api-environment -v /srv/cragmatch/pgtls/server.crt:/tls/server.crt:ro -v /srv/cragmatch/hf:/home/cragmatch/.cache/huggingface --oom-score-adj 500 --log-driver awslogs --log-opt awslogs-region=${REGION} --log-opt awslogs-group=${API_LOG_GROUP} --log-opt mode=non-blocking --log-opt max-buffer-size=4m ${API_IMAGE}
+ExecStop=/usr/bin/docker stop -t 20 api
+TimeoutStopSec=40
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

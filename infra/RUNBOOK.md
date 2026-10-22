@@ -7,8 +7,8 @@ No real account id, email or key is ever committed: they live in `terraform.tfva
 
 ## 1. What this builds and why
 
-- One small Graviton EC2 host (`t4g.small`, Amazon Linux 2023) in one public subnet of one VPC, with
-  **no inbound rules** and outbound TCP 443 and 80 only (80 is for the signed apt repositories). Admin access is SSM Session Manager (no SSH, no key pair).
+- One small Graviton EC2 host (`t4g.small`, Amazon Linux 2023) in one public subnet of one VPC, whose
+  **only inbound rule is TCP 80 from CloudFront's prefix list** (section 14; 5432 stays closed), and outbound TCP 443 and 80 only (80 is for the signed apt repositories). Admin access is SSM Session Manager (no SSH, no key pair).
 - Postgres 17 with PostGIS and pgvector runs on it in a container (`infra/main/host/db/Dockerfile`),
   published only on the host's `127.0.0.1:5432` and on the Docker network `cragmatch` as `db:5432`.
   TCP connections need TLS and a password.
@@ -28,7 +28,7 @@ No real account id, email or key is ever committed: they live in `terraform.tfva
 
 **Why a public subnet and no database "in a private subnet".** A private subnet would need a NAT
 gateway (about 35 USD a month) to reach Claude, Voyage and huggingface.co, because they have no IPv6.
-The protection is the empty inbound rule set, loopback binding, and TLS plus a password.
+The protection is the single CloudFront-only inbound rule, loopback binding, and TLS plus a password.
 
 **One host means one backend instance.** The rate limits live in memory. Scaling out needs a shared
 rate-limit store (a new ticket).
@@ -227,8 +227,8 @@ through SSM port forwarding.
      (`P=$(aws ssm get-parameter --region eu-west-1 --with-decryption --name /cragmatch/db/password --query Parameter.Value --output text)`),
      then run `sudo docker exec -it db psql -U cragmatch` and use `\password cragmatch`, pasting the
      value. Clear it afterwards with `unset P`.
-  4. Restart the units that read the password (`sudo systemctl restart cragmatch-db`, and the
-     backend unit once ticket 025 adds it).
+  4. Restart the units that read the password (`sudo systemctl restart cragmatch-db`, then
+     `sudo systemctl restart cragmatch-api`).
 - Postgres major upgrade (17 to 18) is a manual dump and restore.
 - The app user is the database superuser (as locally), so the planner's `setup()` and
   `CREATE EXTENSION` work. The certificate is self-signed and lives on the data volume.
@@ -253,3 +253,189 @@ cd infra\main
 terraform init -backend-config=..\backend.hcl
 terraform plan -detailed-exitcode
 ```
+
+## 14. Backend: what it adds
+
+Ticket 025. The request path: phone, CloudFront (HTTPS), host port 80 (open to CloudFront only), the
+`api` container, `db` over verified TLS.
+
+- **ECR** repository `cragmatch-api` (immutable commit-SHA tags, the newest 5 kept).
+- **The API unit** `cragmatch-api.service` runs one container named `api` next to Postgres. The image
+  is the one from ticket 021 (one worker).
+- **An API CloudFront distribution** with caching off and the default `*.cloudfront.net` certificate.
+  It is separate from the site's (ticket 026).
+- **Parameter Store** holds the settings and the two key slots under `/cragmatch/api/`, and the host id and
+  API address under `/cragmatch/deploy/`.
+- **Logs** go to the CloudWatch group `/cragmatch/api` (14 days).
+- **The `Deploy` workflow** builds the image after `CI` passes on `main` and deploys it through the SSM
+  document `cragmatch-deploy-api`.
+
+Things to know:
+- **TLS trade-off.** CloudFront to the host is plain HTTP: CloudFront refuses self-signed origin
+  certificates and we have no domain for a public one. Search text, group names, member names and grades
+  cross that hop unencrypted; there are no passwords or logins. The upgrade path is a custom domain.
+- **Exactly one instance.** One host, one unit, one container name. Scaling out needs a shared
+  rate-limit store (a new ticket), because the limits live in memory.
+- **Never sleeps.** There is no wake-up delay. Cut 2 (section 8) is planned downtime: CloudFront
+  answers 502 or 504 and the web app shows its offline state.
+- **Client address.** uvicorn trusts `X-Forwarded-For` only from CloudFront's ranges
+  (`FORWARDED_ALLOW_IPS`, rendered from AWS's managed prefix list). It must never be `*`, which would take
+  the leftmost entry that a viewer controls. If AWS adds a range before your next `apply`, viewers from it
+  share one limit (stricter, never spoofable).
+- **Changing any file under `infra/main/host/` replaces the host** on apply: a few minutes down, data kept.
+- **A deploy restarts the API:** about 10 to 30 seconds of 502 or 504.
+
+Cost added by 025 (USD a month, eu-west-1, fetched 2026-10-14; EUR at 1 EUR = 1.1188 USD):
+
+| Item | USD a month |
+|---|---|
+| ECR storage (0.10 per GB-month; 5 images) | about 0.05, 0.20 at most |
+| ECR pulls to the host (same region) | 0 |
+| API CloudFront distribution (1 TB and 10 M requests free, shared with the site) | 0 |
+| Host to CloudFront (origin fetches) | 0 |
+| Host to Claude, Voyage, huggingface.co (inside the 100 GB free tier) | 0 |
+| CloudWatch Logs, 14 days (5 GB free) | 0 |
+| SSM document, Run Command, Standard parameters | 0 |
+| GitHub Actions `ubuntu-24.04-arm` (public repository) | 0 |
+| **Total** | **about 0.05 to 0.25 (0.05 to 0.22 EUR)** |
+
+No load balancer, no NAT, no extra public IPv4, no Secrets Manager. Section 8's totals stay as they are.
+Sources: the AWS Price List API (`AmazonECR`, `AmazonCloudWatch`, `AWSDataTransfer`), aws.amazon.com/ecr/pricing,
+aws.amazon.com/cloudwatch/pricing and the GitHub docs for hosted runners.
+
+## 15. Backend: first deploy
+
+Order matters.
+1. Apply this commit's Terraform from the working copy **before pushing it**. The host is replaced once
+   (data kept) and the distribution takes 5 to 15 minutes:
+   ```powershell
+   cd infra\main
+   terraform plan
+   terraform apply
+   ```
+2. Enter both keys in the console: Systems Manager, Parameter Store, `/cragmatch/api/anthropic_api_key`,
+   Edit, paste, Save. The same for `/cragmatch/api/voyage_api_key`. Never on a command line. (A CLI variant
+   reads the key with `Read-Host -AsSecureString`.) Do not bump `value_wo_version`: that would write
+   `unset` back.
+3. Push. In Actions, `CI` and then `Deploy` go green. Or run `Deploy` by hand after the first build.
+4. Check the API:
+   ```powershell
+   Invoke-RestMethod ((terraform output -raw api_url) + "/health")
+   ```
+5. Load the data (section 16).
+
+## 16. Backend: load the data (once, safe to repeat)
+
+The database is on the host, with no inbound rule, so the laptop reaches it through SSM port forwarding.
+`import_stays` runs on the laptop, because Overpass and its cache are there.
+
+Window 1:
+```powershell
+aws ssm start-session --target (terraform output -raw host_instance_id) --document-name AWS-StartPortForwardingSession --parameters portNumber=5432,localPortNumber=15432
+```
+Window 2, in `backend/`:
+```powershell
+$p = aws ssm get-parameter --name /cragmatch/db/password --with-decryption --query Parameter.Value --output text
+$env:CRAGMATCH_POSTGRES_URL = "postgresql://cragmatch:$p@127.0.0.1:15432/cragmatch?sslmode=require"
+Remove-Variable p
+uv run python -m app.scripts.load_data
+```
+Check that the first line shows `127.0.0.1:15432/cragmatch`, then answer `y`. It makes 1 Voyage request
+with the laptop's key. Then:
+```powershell
+Remove-Item Env:CRAGMATCH_POSTGRES_URL
+```
+and close both windows.
+
+**Never run pytest in that window.** Wait a minute before a vibe search (Voyage allows 3 a minute). A
+second run prints "0 added".
+
+## 17. Backend: redeploy and what is live
+
+- A push to `main` deploys after `CI` passes.
+- The last five images:
+  ```powershell
+  aws ecr describe-images --repository-name cragmatch-api --query "sort_by(imageDetails,&imagePushedAt)[-5:].imageTags"
+  ```
+- The `Deploy` run's output ends with `Live: <sha>`.
+- On the host: `cat /srv/cragmatch/api/current-image`.
+
+## 18. Backend: logs
+
+- `aws logs tail /cragmatch/api --since 1h --follow`. Each access line starts with the client's own address.
+- The deploy output is in the `Deploy` run (public and masked; it never shows secrets).
+- The migration and database logs: `sudo journalctl -u cragmatch-db`, and `sudo docker logs api` in a session.
+- The boot log: `/var/log/cloud-init-output.log`.
+
+## 19. Backend: roll back
+
+- Actions, `Deploy`, "Run workflow" from `main` with `image_tag` = the previous SHA and `skip_migrations`
+  ticked.
+- Or from the laptop:
+  ```powershell
+  aws ssm send-command --document-name cragmatch-deploy-api --instance-ids <id> --parameters imageTag=<sha>,runMigrations=no
+  ```
+- **A rollback never undoes a migration.** An older image does not know a newer revision, so a rollback skips
+  migrations. Rule: migrations only add (columns nullable or with defaults, no renames or drops in the
+  same release), so the previous image still works.
+- An unhealthy deploy returns to the previous image by itself and the run goes red.
+
+## 20. Backend: change keys, caps and CORS
+
+- Keys: overwrite them in Parameter Store, then `sudo systemctl restart cragmatch-api` in a session (or run
+  `Deploy` by hand with the live SHA).
+- Caps and CORS origins: edit `terraform.tfvars` (`claude_daily_cap_usd`, `voyage_daily_cap_usd`,
+  `cors_origins`), `terraform apply`, then restart the same way.
+- The CloudFront ranges: `terraform apply` refreshes `FORWARDED_ALLOW_IPS`, then restart.
+
+## 21. Backend: memory
+
+After a vibe search, a natural search and a planner run, in a session: `sudo docker stats --no-stream`.
+The API has no hard memory limit (its OOM score makes the kernel pick it before Postgres). The numbers feed
+the choice in section 8, "Before 1 January 2027".
+
+## 22. Backend: destroy
+
+`terraform destroy` also removes the distribution (disabling it takes minutes), the repository with its
+images, the log group and both key parameters (enter the keys again after a re-create). What stays is
+section 12's list.
+
+## 23. Backend: checks
+
+Without an account: section 7's offline checks, plus shellcheck over `infra/main/host/*.sh` and
+`uv run pytest tests/test_client_address.py` in `backend/`.
+
+On the account (write the results down):
+1. `Invoke-RestMethod ((terraform output -raw api_url) + "/health")` shows `database connected`.
+   `Invoke-WebRequest http://<domain>/health -MaximumRedirection 0` answers 301 to https.
+2. The first `Deploy` output shows `== migrations` before `== restart`. In a session,
+   `sudo docker exec db psql -U cragmatch -d cragmatch -c "select extname from pg_extension"` lists `postgis`
+   and `vector`, and `\dt` lists `daily_spend` and the planner's checkpoint tables.
+3. A push gives a green `CI` then a green `Deploy`. `Deploy` with an `image_tag` of 40 zeros fails at "exists".
+   With a Voyage slot set back to `unset`, `Deploy` goes red and `/health` keeps answering. `gh secret list`
+   is empty.
+4. After section 16, `select count(*)` gives `crags` 5, `sectors` 13, `langchain_pg_embedding` 13 and `stays`
+   more than 5. A second run reports "0 added".
+5. `Test-NetConnection <host_public_ip> -Port 80` and `-Port 5432` give `False`. `aws ec2 describe-security-groups`
+   shows the one prefix-list rule. In a session:
+   `sudo docker exec db psql -U cragmatch -d cragmatch -c "select bool_and(ssl), count(*) from pg_stat_ssl join pg_stat_activity using (pid) where client_addr is not null"` gives `t`.
+6. Secrets: load each key into `$k` without printing it; `(terraform state pull) -match [regex]::Escape($k)`
+   gives `False`; then `Remove-Variable k`. `docker history --no-trunc` of the ECR image shows no secret, and the
+   `Deploy` logs show no key, host id or API domain.
+7. On the API's `/docs`, one natural search and one vibe search answer 200. In a session,
+   `select * from daily_spend` shows both providers, and `sudo ls /srv/cragmatch/hf/hub` shows the tokenizer.
+   After `sudo systemctl restart cragmatch-api`, a vibe search works again a minute later.
+8. CORS: a preflight with `Origin: http://localhost:5173` returns that origin in
+   `access-control-allow-origin`; with `Origin: https://evil.example` the header is missing.
+9. Start a planner run on a test group through `/docs`, leave it waiting, run
+   `sudo systemctl restart cragmatch-api`, then answer it. Dispatch `Deploy` with the live SHA: the group,
+   members and run are still there.
+10. Eleven `POST /search/natural` with `{"query": "x"}` from the laptop give ten answers then 429 (about 2 US
+    cents). At once, a phone on mobile data still gets 200. With
+    `-Headers @{ "X-Forwarded-For" = "192.0.2.1" }` from the laptop it is still 429.
+11. `terraform state list` holds one `aws_instance` and no autoscaling group; `sudo docker ps` shows one `api`.
+12. Billing shows no ELB, NAT or Secrets Manager line; the budget is unchanged.
+13. `aws logs tail /cragmatch/api --since 10m` shows the laptop's address (the same as
+    `Invoke-RestMethod https://checkip.amazonaws.com`), not a `130.176.x` or `15.158.x` edge address.
+14. Run section 19 with the previous SHA and `skip_migrations`: `Live: <previous>` appears. Then deploy the
+    newest SHA again.

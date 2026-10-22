@@ -39,6 +39,19 @@ mock_provider "aws" {
       insecure_value = "ami-0123456789abcdef0"
     }
   }
+
+  # Ticket 025's prefix list; the same override is in backend.tftest.hcl. (The CloudFront policy
+  # data sources need none: a mock cannot set their id, and only their names are checked.)
+  override_data {
+    target = data.aws_ec2_managed_prefix_list.cloudfront
+    values = {
+      id = "pl-4fa04526"
+      entries = [
+        { cidr = "130.176.0.0/18", description = "mock" },
+        { cidr = "15.158.0.0/16", description = "mock" },
+      ]
+    }
+  }
 }
 
 variables {
@@ -286,13 +299,13 @@ run "user_data_names_secrets_but_holds_none" {
   command = apply
 
   assert {
-    condition     = strcontains(aws_instance.host.user_data, "/cragmatch/db/password")
+    condition     = strcontains(local.user_data, "/cragmatch/db/password")
     error_message = "The boot data must name the password parameter."
   }
 
   assert {
     condition = anytrue([
-      for f in yamldecode(trimprefix(aws_instance.host.user_data, "#cloud-config\n")).write_files :
+      for f in yamldecode(trimprefix(local.user_data, "#cloud-config\n")).write_files :
       f.path == "/opt/cragmatch/db/Dockerfile" && f.content == file("host/db/Dockerfile")
     ])
     error_message = "The boot data must carry the exact database Dockerfile."
@@ -300,7 +313,7 @@ run "user_data_names_secrets_but_holds_none" {
 
   assert {
     condition = anytrue([
-      for f in yamldecode(trimprefix(aws_instance.host.user_data, "#cloud-config\n")).write_files :
+      for f in yamldecode(trimprefix(local.user_data, "#cloud-config\n")).write_files :
       f.path == "/opt/cragmatch/cragmatch-db.service" && f.content == file("host/cragmatch-db.service")
     ])
     error_message = "The boot data must carry the exact unit file."
@@ -310,12 +323,12 @@ run "user_data_names_secrets_but_holds_none" {
     # The setup script legitimately contains "POSTGRES_PASSWORD=%s"; what must never appear is a
     # value assigned to it. The underlying guarantee is that Terraform refuses an ephemeral value
     # (the generated password) in user_data.
-    condition     = !can(regex("POSTGRES_PASSWORD=[A-Za-z0-9]", aws_instance.host.user_data))
+    condition     = !can(regex("POSTGRES_PASSWORD=[A-Za-z0-9]", local.user_data))
     error_message = "The boot data must not assign a literal value to POSTGRES_PASSWORD."
   }
 
   assert {
-    condition     = length(aws_instance.host.user_data) < 16384
+    condition     = length(aws_instance.host.user_data_base64) < 16384
     error_message = "EC2 user data is limited to 16384 bytes."
   }
 }

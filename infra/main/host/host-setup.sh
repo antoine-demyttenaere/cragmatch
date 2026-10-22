@@ -89,3 +89,13 @@ docker build -t cragmatch-db /opt/cragmatch/db
 cp /opt/cragmatch/cragmatch-db.service /etc/systemd/system/cragmatch-db.service
 systemctl daemon-reload
 systemctl enable --now cragmatch-db.service
+
+# 10. The API unit (ticket 025). Before the first deploy there is no current-image file, so the
+# unit's condition skips the start; on a replaced host the file is on the data volume and the unit
+# pulls and starts the last deployed image by itself.
+install -d -m 0755 "$DATA_DIR/api"
+install -d -m 0755 -o 10001 -g 10001 "$DATA_DIR/hf"
+cp /opt/cragmatch/cragmatch-api.service /etc/systemd/system/cragmatch-api.service
+systemctl daemon-reload
+systemctl enable cragmatch-api.service
+systemctl start cragmatch-api.service
