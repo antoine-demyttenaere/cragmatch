@@ -180,12 +180,17 @@ run "api_settings_use_the_database_over_verified_tls_and_hold_no_secret" {
         "CRAGMATCH_POSTGRES_HOST=db",
         "PGSSLMODE=verify-full",
         "PGSSLROOTCERT=/tls/server.crt",
-        "CRAGMATCH_CORS_ORIGINS=http://localhost:5173",
+        "CRAGMATCH_CORS_ORIGINS=https://${aws_cloudfront_distribution.web.domain_name}",
         "CRAGMATCH_CLAUDE_DAILY_CAP_USD=0.10",
         "CRAGMATCH_VOYAGE_DAILY_CAP_USD=0.05",
       ] : contains(split("\n", aws_ssm_parameter.api_settings.value), line)
     ])
-    error_message = "The settings must name the database, verified TLS, the CORS origin and both caps."
+    error_message = "The settings must name the database, verified TLS, the site as the only CORS origin and both caps."
+  }
+
+  assert {
+    condition     = !strcontains(aws_ssm_parameter.api_settings.value, "localhost")
+    error_message = "The cloud API must not allow localhost."
   }
 
   assert {
@@ -239,16 +244,6 @@ run "api_key_slots_are_write_only_secure_strings" {
     )
     error_message = "A write-only value must not be readable from the resource."
   }
-}
-
-run "cors_origins_must_be_plain_origins" {
-  command = plan
-
-  variables {
-    cors_origins = "*"
-  }
-
-  expect_failures = [var.cors_origins]
 }
 
 run "daily_caps_cannot_be_negative" {

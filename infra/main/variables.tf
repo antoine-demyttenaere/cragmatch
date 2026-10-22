@@ -90,20 +90,6 @@ variable "activate_cost_allocation_tag" {
   default     = false
 }
 
-# Ticket 026 sets this to the site's own origin (its CloudFront address).
-variable "cors_origins" {
-  description = "Browser origins allowed to read the API's answers, comma-separated, each like https://example.com (no path, no trailing slash, never *). The default lets a local npm run dev use the cloud API."
-  type        = string
-  default     = "http://localhost:5173"
-
-  validation {
-    condition = alltrue([
-      for origin in split(",", var.cors_origins) : can(regex("^https?://[A-Za-z0-9.-]+(:[0-9]+)?$", origin))
-    ])
-    error_message = "Every cors_origins entry must be an origin like https://example.com: no *, no path, no trailing slash."
-  }
-}
-
 # These defaults match app/core/config.py. Set a higher cloud cap in terraform.tfvars. 0 switches that provider off.
 variable "claude_daily_cap_usd" {
   description = "Daily spending cap for Claude in USD (ticket 022). 0 switches Claude off."

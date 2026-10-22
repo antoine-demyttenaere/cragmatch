@@ -186,3 +186,171 @@ jobs:
             exit 1
           fi
           echo "The API answers through CloudFront"
+
+  web:
+    name: Deploy web
+    # Backend first, so the API allows the new origin before the site calls it. Without always(), a
+    # failed or cancelled backend skips this job.
+    needs: backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_repository.full_name == github.repository)
+    env:
+      EVENT: ${{ github.event_name }}
+      REPOSITORY: ${{ github.repository }}
+    steps:
+      # On a manual run the input is the commit to deploy, for both parts.
+      - name: Pick the commit
+        id: pick
+        env:
+          INPUT_TAG: ${{ inputs.image_tag }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            sha="$INPUT_TAG"
+          else
+            sha="$HEAD_SHA"
+          fi
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The commit must be a 40-character SHA"
+            exit 1
+          fi
+          go=true
+          if [ "$EVENT" = "workflow_run" ]; then
+            # A slow, older CI run must not deploy over a newer commit.
+            main_sha="$(git ls-remote "https://github.com/$REPOSITORY.git" refs/heads/main | cut -f1)"
+            if [ "$main_sha" != "$sha" ]; then
+              echo "::notice::A newer commit is on main; its own run deploys it"
+              go=false
+            fi
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "go=$go" >> "$GITHUB_OUTPUT"
+
+      # Both triggers: a rollback rebuilds the old web.
+      - uses: actions/checkout@v7
+        if: steps.pick.outputs.go == 'true'
+        with:
+          ref: ${{ steps.pick.outputs.sha }}
+
+      # The publish script comes from the workflow's own commit, not the target's: a rollback to a
+      # commit from before 026 has no script, and a fix to the pruning must apply to rollbacks too.
+      - uses: actions/checkout@v7
+        if: steps.pick.outputs.go == 'true'
+        with:
+          ref: ${{ github.sha }}
+          path: deploy-tools
+
+      - uses: actions/setup-node@v7
+        if: steps.pick.outputs.go == 'true'
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        if: steps.pick.outputs.go == 'true'
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          mask-aws-account-id: true
+
+      - name: Read the deploy parameters
+        id: params
+        if: steps.pick.outputs.go == 'true'
+        run: |
+          read_param() {
+            aws ssm get-parameter --name "/cragmatch/deploy/$1" --query Parameter.Value --output text
+          }
+          api_url="$(read_param api_url)"
+          web_bucket="$(read_param web_bucket)"
+          web_distribution_id="$(read_param web_distribution_id)"
+          web_url="$(read_param web_url)"
+          # Mask before anything is written: the bucket name holds the account id and the logs are public.
+          # curl errors print the bare host name, hence the second line for each address.
+          for value in "$api_url" "$web_bucket" "$web_distribution_id" "$web_url" "${api_url#https://}" "${web_url#https://}"; do
+            echo "::add-mask::$value"
+          done
+          {
+            echo "api_url=$api_url"
+            echo "web_bucket=$web_bucket"
+            echo "web_distribution_id=$web_distribution_id"
+            echo "web_url=$web_url"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install web dependencies
+        if: steps.pick.outputs.go == 'true'
+        working-directory: web
+        run: npm ci
+
+      - name: Build web
+        if: steps.pick.outputs.go == 'true'
+        working-directory: web
+        env:
+          VITE_API_URL: ${{ steps.params.outputs.api_url }}
+        run: npm run build
+
+      - name: Publish web
+        if: steps.pick.outputs.go == 'true'
+        env:
+          SHA: ${{ steps.pick.outputs.sha }}
+          BUCKET: ${{ steps.params.outputs.web_bucket }}
+          DIST_ID: ${{ steps.params.outputs.web_distribution_id }}
+          API_URL: ${{ steps.params.outputs.api_url }}
+        run: bash deploy-tools/infra/web/publish-web.sh web/dist "$BUCKET" "$DIST_ID" "$SHA" "$API_URL"
+
+      # Never prints headers: only grep -q on what came back.
+      - name: Check the live site
+        if: steps.pick.outputs.go == 'true'
+        env:
+          WEB_URL: ${{ steps.params.outputs.web_url }}
+          API_URL: ${{ steps.params.outputs.api_url }}
+        run: |
+          retry=(--retry 6 --retry-delay 5 --retry-all-errors)
+          check() {
+            echo "check: $1"
+          }
+
+          check "the page, its cache rule and its security headers"
+          page="$(curl -fsS "${retry[@]}" -D "$RUNNER_TEMP/headers.txt" "$WEB_URL/")"
+          grep -q 'id="root"' <<< "$page"
+          grep -qi '^cache-control:.*no-cache' "$RUNNER_TEMP/headers.txt"
+          grep -qi '^strict-transport-security:' "$RUNNER_TEMP/headers.txt"
+          grep -qi '^content-security-policy:' "$RUNNER_TEMP/headers.txt"
+
+          check "a share link and a mistyped path open the app"
+          # Captured first: grep -q closing a pipe early would fail curl under pipefail.
+          shared="$(curl -fsS "${retry[@]}" "$WEB_URL/?group=ABCD2345")"
+          grep -q 'id="root"' <<< "$shared"
+          mistyped="$(curl -fsS "${retry[@]}" "$WEB_URL/no/such/page")"
+          grep -q 'id="root"' <<< "$mistyped"
+
+          check "the first script is immutable and typed as JavaScript"
+          script="$(grep -m 1 -oE '/assets/[^"]+\.js' <<< "$page")"
+          [ -n "$script" ]
+          curl -fsS "${retry[@]}" -D "$RUNNER_TEMP/script-headers.txt" -o /dev/null "$WEB_URL$script"
+          grep -qi '^cache-control:.*immutable' "$RUNNER_TEMP/script-headers.txt"
+          grep -qi '^content-type:.*javascript' "$RUNNER_TEMP/script-headers.txt"
+
+          check "http redirects to https"
+          code="$(curl -sS "${retry[@]}" -o /dev/null -w '%{http_code} %{redirect_url}' "http://${WEB_URL#https://}/")"
+          [[ "$code" == "301 https://"* ]]
+
+          check "the API allows the site and nobody else"
+          allowed="$(curl -sS "${retry[@]}" -o /dev/null -D - -X OPTIONS "$API_URL/health" \
+            -H "Origin: $WEB_URL" -H "Access-Control-Request-Method: GET" | tr -d '\r')"
+          grep -qix "access-control-allow-origin: $WEB_URL" <<< "$allowed"
+          refused="$(curl -sS "${retry[@]}" -o /dev/null -D - -X OPTIONS "$API_URL/health" \
+            -H "Origin: https://evil.example" -H "Access-Control-Request-Method: GET" | tr -d '\r')"
+          if grep -qi '^access-control-allow-origin:' <<< "$refused"; then
+            echo "::error::The API allowed another origin"
+            exit 1
+          fi
+          echo "The site answers through CloudFront and the API allows only its origin"

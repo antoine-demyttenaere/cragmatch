@@ -125,6 +125,7 @@ Without an account (no AWS access needed):
 terraform fmt -check -recursive infra
 foreach ($d in 'infra\bootstrap','infra\main') { terraform -chdir=$d init -backend=false; terraform -chdir=$d validate; terraform -chdir=$d test }
 bash infra/main/host/check-db-image.sh
+bash infra/web/check-publish.sh
 ```
 On the account (cost: a few cents):
 ```powershell
@@ -303,6 +304,25 @@ No load balancer, no NAT, no extra public IPv4, no Secrets Manager. Section 8's 
 Sources: the AWS Price List API (`AmazonECR`, `AmazonCloudWatch`, `AWSDataTransfer`), aws.amazon.com/ecr/pricing,
 aws.amazon.com/cloudwatch/pricing and the GitHub docs for hosted runners.
 
+Cost added by 026 (USD a month, eu-west-1, fetched 2026-10-14):
+
+| Item | USD a month |
+|---|---|
+| S3 storage for the site (0.023 per GB-month; two releases are about 0.7 MB) | about 0.00003 |
+| S3 PUT and LIST from deploys (0.005 per 1,000; about 15 per deploy, 30 deploys) | about 0.002 |
+| S3 GET from CloudFront (0.004 per 10,000; `index.html` revalidates once per page view) | about 0.002 |
+| S3 to CloudFront transfer | 0 |
+| Web CloudFront distribution (the 1 TB and 10 M requests free each month are shared with the API) | 0 |
+| Invalidations (one `/*` path per deploy; the first 1,000 paths a month are free) | 0 |
+| Origin access control, response headers policy, managed cache policy | 0 |
+| GitHub Actions `web` job (public repository) | 0 |
+| **Web hosting (026): under 0.01 USD a month** | **under 0.01 (under 0.01 EUR)** |
+
+Section 8's totals stay at about 4.8 EUR until 2026-12-31 and about 16.8 EUR from 2027-01-01 (024 had
+already counted about 0.01 for 026). No fixed-price part: no custom domain or certificate, no WAF, no
+CloudFront Function, no logging. Sources: the AWS Price List API (`AmazonCloudFront`, `AmazonS3`,
+`AWSDataTransfer`) and the CloudFront Developer Guide (`PayingForInvalidation`).
+
 ## 15. Backend: first deploy
 
 Order matters.
@@ -384,8 +404,8 @@ second run prints "0 added".
 
 - Keys: overwrite them in Parameter Store, then `sudo systemctl restart cragmatch-api` in a session (or run
   `Deploy` by hand with the live SHA).
-- Caps and CORS origins: edit `terraform.tfvars` (`claude_daily_cap_usd`, `voyage_daily_cap_usd`,
-  `cors_origins`), `terraform apply`, then restart the same way.
+- Caps: edit `terraform.tfvars` (`claude_daily_cap_usd`, `voyage_daily_cap_usd`), `terraform apply`, then
+  restart the same way. The CORS origin is not a setting any more: it is the site's address (section 24).
 - The CloudFront ranges: `terraform apply` refreshes `FORWARDED_ALLOW_IPS`, then restart.
 
 ## 21. Backend: memory
@@ -425,8 +445,8 @@ On the account (write the results down):
 7. On the API's `/docs`, one natural search and one vibe search answer 200. In a session,
    `select * from daily_spend` shows both providers, and `sudo ls /srv/cragmatch/hf/hub` shows the tokenizer.
    After `sudo systemctl restart cragmatch-api`, a vibe search works again a minute later.
-8. CORS: a preflight with `Origin: http://localhost:5173` returns that origin in
-   `access-control-allow-origin`; with `Origin: https://evil.example` the header is missing.
+8. CORS: a preflight with `Origin: <web_url>` returns that origin in `access-control-allow-origin`; with
+   `Origin: https://evil.example` or `http://localhost:5173` the header is missing (ticket 026 narrowed it).
 9. Start a planner run on a test group through `/docs`, leave it waiting, run
    `sudo systemctl restart cragmatch-api`, then answer it. Dispatch `Deploy` with the live SHA: the group,
    members and run are still there.
@@ -438,4 +458,100 @@ On the account (write the results down):
 13. `aws logs tail /cragmatch/api --since 10m` shows the laptop's address (the same as
     `Invoke-RestMethod https://checkip.amazonaws.com`), not a `130.176.x` or `15.158.x` edge address.
 14. Run section 19 with the previous SHA and `skip_migrations`: `Live: <previous>` appears. Then deploy the
+    newest SHA again.
+
+## 24. Web: what it adds
+
+Ticket 026. The request path: phone, CloudFront (HTTPS), a private S3 bucket read through origin access
+control. The site has its own distribution, separate from the API's.
+
+- **Cache rules.** Hashed files under `assets/` are cached for a year and marked `immutable` (the name changes
+  whenever the content does). `index.html` is `no-cache`, so browsers revalidate it on every load. Each deploy
+  invalidates `/*` once and waits for it, so a green `Deploy` means everyone sees the new version.
+- **Two releases are kept.** A deploy keeps the assets of the new and the previous release and prunes older
+  ones only after the invalidation. A visitor with the previous version open can still load its lazily
+  fetched files (a font subset, for example). Never run `aws s3 sync --delete` on the bucket.
+- **Unknown paths open the app.** S3 answers 403 for a missing key, and the distribution turns 403 and 404
+  into `index.html` with status 200.
+- **Security headers** (our own policy `cragmatch-web-security`): HSTS for a year, `nosniff`, `X-Frame-Options:
+  DENY`, `Referrer-Policy: no-referrer` (the share link's `?group=CODE` never leaves in a Referer) and a CSP
+  that allows scripts, styles, fonts and images from the site itself and connections to the site and the API's
+  address only. A future external call (maps, analytics) must add itself to `local.web_csp` in `web.tf`.
+- **The API allows only the site's origin** (`CRAGMATCH_CORS_ORIGINS` is the web distribution's address,
+  written by Terraform). So `npm run dev` against the cloud API is refused; use the local backend.
+
+## 25. Web: first deploy
+
+Order matters only for the running API, which picks up the new origin at its next start.
+1. Apply from the working copy **before pushing**. If `terraform.tfvars` still has a `cors_origins` line,
+   delete it first. The apply creates the bucket, the distribution (5 to 15 minutes), the deploy policy and
+   three `/cragmatch/deploy/web_*` parameters, and rewrites `/cragmatch/api/settings`. The host is not
+   replaced:
+   ```powershell
+   cd infra\main
+   terraform plan
+   terraform apply
+   ```
+2. Push. `CI` goes green, then `Deploy backend` re-renders the API environment and restarts the container (the
+   API now allows the site), then `Deploy web` builds and publishes. If you applied without pushing, run
+   `Deploy` by hand with the live SHA.
+3. Open the site:
+   ```powershell
+   terraform output -raw web_url
+   ```
+
+## 26. Web: redeploy and what is live
+
+- Every green `CI` on `main` deploys the backend, then the web app: both, always.
+- The `Deploy` run ends with `Live web: <sha>`.
+- The live commit and its files:
+  ```powershell
+  aws s3 cp ("s3://" + (terraform output -raw web_bucket) + "/release/current.txt") -
+  ```
+  `previous.txt` in the same folder is the release before.
+
+## 27. Web: roll back
+
+- Actions, `Deploy`, "Run workflow" from `main` with `image_tag` = the previous SHA and `skip_migrations`
+  ticked. Both parts return to that commit: `Deploy web` rebuilds it with today's API address. The
+  publish script always comes from the commit the workflow runs on, so the target may be older than 026.
+  A target from before ticket 021 does not read the API address at build time, so its site would call the
+  wrong API: roll back to 021 or later.
+- The previous release's assets are still in the bucket, so pages that are open keep working.
+- A web-only rollback is not offered (simple and predictable).
+
+## 28. Web: destroy
+
+- `terraform destroy` (section 22) also removes the bucket with its files (`force_destroy`), the web
+  distribution (disabling takes minutes), its policies and the three parameters.
+- Removing only the web hosting is a code change (delete `web.tf`, point CORS elsewhere) followed by an apply.
+  Never use `-target`: it would also destroy `/cragmatch/api/settings`, which depends on the site.
+
+## 29. Web: checks
+
+Without an account: section 7's offline checks, plus shellcheck over `infra/web/*.sh`.
+
+On the account (write the results down):
+1. Follow section 25. `terraform plan` before the apply shows only additions, the change to
+   `/cragmatch/api/settings` and no replacement of `aws_instance.host`. After the push, `CI`, `Deploy backend`
+   and `Deploy web` are green with no other manual step.
+2. On a phone on mobile data, open `web_url`; a filter search returns sectors.
+   `Invoke-WebRequest ("http://" + <domain>) -MaximumRedirection 0` gives 301 to `https`.
+3. Create a group on the laptop, open its share link on another phone, refresh. Open `<web_url>/no/such/page`:
+   the app, not an XML error.
+4. Keep a tab open, push a visible text change and wait for `Deploy`: the old tab still works and a reload shows
+   the change. `curl.exe -sI <web_url>/` shows `cache-control: no-cache`; an asset shows `immutable`. After
+   three deploys, `aws s3 ls s3://<bucket>/assets/` shows only the files of the last two `release/*.txt`.
+5. Download the live `index.html` and JS (`Invoke-WebRequest -OutFile`) and `Select-String` for `sk-ant`, `pa-`
+   and `CRAGMATCH_`: nothing found.
+6. The network tab shows `access-control-allow-origin: <web_url>` on API answers. From a page on another origin
+   (the console on `https://example.com`), `fetch("<api_url>/health")` fails with a CORS error.
+   `aws ssm get-parameter --name /cragmatch/api/settings` shows exactly one origin.
+7. On the live site: start a planner run and answer it; a group search with the stays panel; one natural search
+   and one vibe search a minute apart (Voyage limit). The browser console shows no CSP violation.
+8. A throwaway commit with a Ruff error leaves `Deploy` skipped and the site unchanged. `gh secret list` is
+   empty. The `Deploy` logs show `***` for the API address, the site, the bucket and the distribution id.
+9. A backend-only commit runs both jobs.
+10. Next month's bill shows S3 and CloudFront at 0.00 or 0.01. The budget is unchanged.
+11. Run section 27 with the previous SHA: `release/current.txt` shows it and the site works. Then deploy the
     newest SHA again.

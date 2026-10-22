@@ -137,10 +137,11 @@ The cloud setup lives in `infra/` and `infra/RUNBOOK.md` is the only way in: acc
 bootstrap, apply, costs, backups and destroy. Agents never run `terraform plan` or `apply`
 against AWS. The checks that need no account are `terraform fmt -check -recursive infra`,
 `terraform init -backend=false` then `terraform validate` and `terraform test` in
-`infra/bootstrap` and `infra/main`, and `bash infra/main/host/check-db-image.sh` (needs Docker).
+`infra/bootstrap` and `infra/main`, `bash infra/web/check-publish.sh`, and
+`bash infra/main/host/check-db-image.sh` (needs Docker).
 
-Pushes to `main` deploy the backend after `CI` passes (the `Deploy` workflow). Rollbacks and logs are in
-the runbook.
+Pushes to `main` deploy the backend, then the web app, after `CI` passes (the `Deploy` workflow). The
+site's address is `terraform output -raw web_url`. Rollbacks and logs are in the runbook.
 
 ## Project structure
 
@@ -153,7 +154,8 @@ the runbook.
 .github/workflows/aws-identity.yml  Manual run: assumes the AWS deploy role through OIDC
                          and prints its ARN (shows the trust works from main only).
 .github/workflows/deploy.yml  After CI on main: build the arm64 API image, push to ECR,
-                         deploy through SSM.
+                         deploy through SSM, then build web/ with the live API address,
+                         publish to S3 and invalidate CloudFront.
 docker-compose.yml       The db service; the api service under the prod profile.
 infra/                   AWS as Terraform (ticket 024). RUNBOOK.md is the only way in.
   RUNBOOK.md             Account set-up, bootstrap, apply, checks, costs, backups, destroy.
@@ -163,12 +165,14 @@ infra/                   AWS as Terraform (ticket 024). RUNBOOK.md is the only w
     tests/               Offline terraform tests for the bucket.
   main/                  Network, one Graviton host, Postgres host files, SSM password,
                          budget alerts, GitHub OIDC deploy role, ECR, API CloudFront
-                         distribution, deploy document.
+                         distribution, deploy document, web bucket and CloudFront
+                         distribution.
     tests/               Offline terraform tests with a mocked AWS provider.
     host/                First-boot script, systemd units (database, API), deploy, pull and
                          environment scripts for the API, and check-db-image.sh.
       db/                Cloud database image (Postgres 17, PostGIS, pgvector, TLS only)
                          and its first-start init scripts.
+  web/                   Publish script for web/dist (keeps two releases) and its offline check.
 backend/
   Dockerfile             API image: one worker on $PORT, non-root, Alembic included.
   .dockerignore          Keeps .env, caches and tests out of the image.

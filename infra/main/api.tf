@@ -31,7 +31,9 @@ locals {
     # own rate-limit bucket.
     FORWARDED_ALLOW_IPS = join(",", sort([for e in data.aws_ec2_managed_prefix_list.cloudfront.entries : e.cidr]))
 
-    CRAGMATCH_CORS_ORIGINS = var.cors_origins
+    # Exactly the live site. No cycle: the web distribution does not depend on this parameter. The API
+    # reads it at its next start, which is the next Deploy backend.
+    CRAGMATCH_CORS_ORIGINS = "https://${aws_cloudfront_distribution.web.domain_name}"
 
     CRAGMATCH_CLAUDE_DAILY_CAP_USD = format("%.2f", var.claude_daily_cap_usd)
     CRAGMATCH_VOYAGE_DAILY_CAP_USD = format("%.2f", var.voyage_daily_cap_usd)

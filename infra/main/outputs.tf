@@ -78,6 +78,21 @@ output "api_distribution_domain" {
   value       = aws_cloudfront_distribution.api.domain_name
 }
 
+output "web_url" {
+  description = "The site's public HTTPS address (no trailing slash)."
+  value       = "https://${aws_cloudfront_distribution.web.domain_name}"
+}
+
+output "web_bucket" {
+  description = "Name of the private S3 bucket that holds the site."
+  value       = aws_s3_bucket.web.id
+}
+
+output "web_distribution_id" {
+  description = "Id of the web CloudFront distribution."
+  value       = aws_cloudfront_distribution.web.id
+}
+
 output "ecr_repository_url" {
   description = "Registry address of the API image repository."
   value       = aws_ecr_repository.api.repository_url
